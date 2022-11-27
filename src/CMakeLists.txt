@@ -11,7 +11,10 @@ add_library(${PROJECT_NAME}
             ${CMAKE_CURRENT_SOURCE_DIR}/QuantumComputation.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/CircuitOptimizer.cpp
 
+            ${CMAKE_CURRENT_SOURCE_DIR}/zx/Extraction.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/zx/FunctionalityConstruction.cpp
+
+            #${CMAKE_CURRENT_SOURCE_DIR}/../../../src/EquivalenceCheckingManager.cpp
 
             ${CMAKE_CURRENT_SOURCE_DIR}/algorithms/QFT.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/algorithms/Grover.cpp
@@ -47,7 +50,10 @@ add_library(${PROJECT_NAME}
             ${${PROJECT_NAME}_SOURCE_DIR}/include/dd/Simulation.hpp
             ${${PROJECT_NAME}_SOURCE_DIR}/include/dd/NoiseFunctionality.hpp
 
+            ${${PROJECT_NAME}_SOURCE_DIR}/include/zx/Extraction.hpp
             ${${PROJECT_NAME}_SOURCE_DIR}/include/zx/FunctionalityConstruction.hpp
+
+            #${${PROJECT_NAME}_SOURCE_DIR}/../../include/EquivalenceCheckingManager.hpp
 
             ${${PROJECT_NAME}_SOURCE_DIR}/include/algorithms/QFT.hpp
             ${${PROJECT_NAME}_SOURCE_DIR}/include/algorithms/Grover.hpp
