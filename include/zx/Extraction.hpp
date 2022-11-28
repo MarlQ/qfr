@@ -21,10 +21,10 @@
 
 namespace zx {
 
-    qc::QuantumComputation& extract(zx::ZXDiagram& diag);
+    void extract(qc::QuantumComputation& circuit, zx::ZXDiagram& diag);
     void testExtraction();
     bool updateFrontier(zx::ZXDiagram& diag, std::vector<zx::Vertex>& frontier, std::vector<zx::Vertex>& outputs, qc::QuantumComputation& circuit);
-    void processFrontier(zx::ZXDiagram& diag, std::vector<zx::Vertex>& frontier, qc::QuantumComputation& circuit);
+    void processFrontier(zx::ZXDiagram& diag, std::vector<zx::Vertex>& frontier, std::vector<zx::Vertex>& outputs, qc::QuantumComputation& circuit);
     std::vector<std::pair<int, int>> permutation_as_swaps(std::map<int, int> perm);
 }
 

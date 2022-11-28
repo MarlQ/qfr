@@ -84,7 +84,10 @@ namespace zx {
 
 
 
+    /* initFrontier(zx::ZXDiagram& diag) {
 
+
+    } */
 
 
 
@@ -92,13 +95,13 @@ namespace zx {
 
     
 
-    qc::QuantumComputation& extract(zx::ZXDiagram& diag) {
+    void extract(qc::QuantumComputation& circuit, zx::ZXDiagram& diag) {
         diag.toGraphlike(); // TODO: Not necessarily necessary
 
         //  TODO: Create a copy of diag
 
         // Create empty circuit
-        qc::QuantumComputation circuit = qc::QuantumComputation(diag.getNQubits());
+        
         
         // Initialise frontier
         auto inputs = diag.getInputs();
@@ -120,7 +123,7 @@ namespace zx {
         printVector(outputs);
    
         
-        processFrontier(diag, frontier, circuit);
+        processFrontier(diag, frontier, outputs, circuit);
         std::cout << "Current Circuit" << std::endl;
         std::cout << circuit << std::endl;
 
@@ -178,7 +181,7 @@ namespace zx {
         std::map<int, int> swaps;
         bool leftover_swaps = false;
 
-        for(int i = 0; i < frontier.size(); ++i) {
+        for(size_t i = 0; i < frontier.size(); ++i) {
             zx::Vertex v = frontier[i];
             
             auto incident = diag.incidentEdges(v);
@@ -194,7 +197,7 @@ namespace zx {
                         //diag.removeEdge(v, w); 
                         edge.type = EdgeType::Simple;
                     }
-                    int j = it - inputs.begin();
+                    size_t j = it - inputs.begin();
                     if( j != i) {
                         std::cout << "Found swap at " << i << " , " << j << std::endl;
                         leftover_swaps = true;
@@ -205,29 +208,19 @@ namespace zx {
             } 
             //if(inputs[])
         }
-        if(leftover_swaps) {
+
+        /* if(leftover_swaps) { // FIXME: There appears to be a bug...
             std::cout << "Creating swaps... " << std::endl;
             // Check for swaps
             for(auto s : permutation_as_swaps(swaps)) {
                 circuit.swap(s.first, s.second);
             }
-        }
+        } */
         
 
         circuit.reverse();
-        std::cout << "Reversed Circuit" << std::endl;
-        std::cout << circuit << std::endl;
 
-        /* dd::Qubit qw = diag.qubit(w);
-        circuit.x(diag.qubit(v), dd::Control{w});
-
-        dd::Qubit qw = diag.qubit(v);
-        circuit.x(diag.qubit(w), dd::Control{v});
-
-        dd::Qubit qw = diag.qubit(w);
-        circuit.x(diag.qubit(v), dd::Control{w}); */
-
-        return circuit;
+        return;
     }
 
     std::vector<std::pair<int, int>> permutation_as_swaps(std::map<int, int> perm) {
@@ -239,7 +232,7 @@ namespace zx {
         std::cout << "Size: " << perm.size() << std::endl;
 
         std::vector<int> l;
-        for(int i = 0; i < perm.size(); ++i) {
+        for(size_t i = 0; i < perm.size(); ++i) {
             l.emplace_back(perm[i]);
         }
 
@@ -255,15 +248,15 @@ namespace zx {
         printVector(pinv);
 
         std::vector<int> linv;
-        for(int i = 0; i < pinv.size(); ++i) {
+        for(size_t i = 0; i < pinv.size(); ++i) {
             linv.emplace_back(pinv[i]);
         }
 
         std::cout << "linv:" << std::endl;
         printVector(linv);
 
-        for(int i = 0; i < perm.size(); ++i) {
-            if(l[i] == i) continue;
+        for(size_t i = 0; i < perm.size(); ++i) {
+            if((size_t) l[i] == i) continue;
             int t1 = l[i];
             int t2 = linv[i];
             std::cout << "Adding swap gate at " << i << " , " << t2 << std::endl;
@@ -373,8 +366,8 @@ namespace zx {
                         for(int k = 0; k < m; ++k) {
                             //std::cout << "Adding rows " << i << " and " << j << std::endl;
                             matrix[i][k] = matrix[j][k] ^ matrix[i][k];
-                            rowOperations.emplace_back(std::pair<int, int>{j, i});
                         }
+                        rowOperations.emplace_back(std::pair<int, int>{j, i});
                         break;
                     }
                     else if(j == n-1) { // FIXME: Just continue...
@@ -395,6 +388,8 @@ namespace zx {
                 }
             }
         }
+        // TODO: Remove duplicates
+        // Do (2,1) and (1,2) remove each other?
         return rowOperations;
     }
 
@@ -403,8 +398,8 @@ namespace zx {
     // TODO: Move to ZXDiagram.hpp
     gf2Mat getAdjacencyMatrix(zx::ZXDiagram& diag, const std::vector<Vertex>& vertices_from, const std::vector<Vertex>& vertices_to) {
         gf2Mat adjMat{vertices_from.size(), gf2Vec(vertices_to.size(), false)};
-        for(int i = 0; i < vertices_from.size(); ++i){
-            for(int j = 0; j < vertices_to.size(); ++j){
+        for(size_t i = 0; i < vertices_from.size(); ++i){
+            for(size_t j = 0; j < vertices_to.size(); ++j){
                 if(diag.connected(vertices_from[i], vertices_to[j])) {
                     adjMat[i][j] = true;
                 }
@@ -444,7 +439,7 @@ namespace zx {
         }
     }
  */
-    void processFrontier(zx::ZXDiagram& diag, std::vector<zx::Vertex>& frontier, qc::QuantumComputation& circuit) {
+    void processFrontier(zx::ZXDiagram& diag, std::vector<zx::Vertex>& frontier, std::vector<zx::Vertex>& outputs, qc::QuantumComputation& circuit) {
         std::cout << "VERTS: " << std::endl;
         for(  auto v : diag.getVertices() ) {
             std::cout << v.first << ", ";
@@ -459,25 +454,30 @@ namespace zx {
 
         for(auto const& v : frontier) {
 
+            
+
             // If v connected to output by Hadamard
+            // TODO: Improve to detect chains
             auto incident = diag.incidentEdges(v);
             for(auto edge : incident) {
                 zx::Vertex w = edge.to;
-                
-                if(diag.type(w) == zx::VertexType::Boundary) {
-                    
-                    if(edge.type == zx::EdgeType::Hadamard) {
-                        circuit.h(diag.qubit(v));
-                        edge.type = EdgeType::Simple;
-                        //diag.removeEdge(v, w); // Remove edge, or remove Hadamard?
-                    }
+
+                if( std::find(outputs.begin(), outputs.end(), w) == outputs.end() ) {
+                    continue;
                 }
+                    
+                if(edge.type == zx::EdgeType::Hadamard) {
+                    circuit.h(diag.qubit(v));
+                    edge.type = EdgeType::Simple;
+                    //diag.removeEdge(v, w); // Remove edge, or remove Hadamard?
+                }
+                
             }
 
             // Add phase-gate at v with phase p
             if(!diag.phase(v).isZero()) {
                 circuit.phase(diag.qubit(v), diag.phase(v).getConst().toDouble()); 
-                diag.setPhase(v, PiExpression(PiRational(0, 1)));
+                diag.setPhase(v, PiExpression());
             }
             
         }
@@ -544,9 +544,9 @@ namespace zx {
 
         std::vector<zx::Vertex> ws;
         std::vector<zx::Vertex> ws_neighbours;
-        for(int i = 0; i < adjMatrix.size(); ++i) {
+        for(size_t i = 0; i < adjMatrix.size(); ++i) {
             int sum = 0, nonZero = 0;
-            for(int j = 0; j < adjMatrix[i].size(); ++j) {
+            for(size_t j = 0; j < adjMatrix[i].size(); ++j) {
                 sum += adjMatrix[i][j];
                 if(adjMatrix[i][j]) {
                     nonZero = j;
@@ -577,35 +577,48 @@ namespace zx {
             }
             
 
-            processFrontier(diag, frontier, circuit);
+            processFrontier(diag, frontier, outputs, circuit);
             return true; // FIXME: ?
         }
 
-        adjMatrix = getAdjacencyMatrix(diag, frontier, ws);
-        std::cout << "New Adjacency Matrix:" << std::endl;
-        printMatrix(adjMatrix);
+        //adjMatrix = getAdjacencyMatrix(diag, frontier, ws);
+        //std::cout << "New Adjacency Matrix:" << std::endl;
+        //printMatrix(adjMatrix);
 
+        // Extract CNOTs
         for(auto r : rowOperations) {
             dd::Qubit control = diag.qubit(r.second); // From row operation: second = second + first
             circuit.x(diag.qubit(r.first), dd::Control{control}); // FIXME: Which order is correct?
 
             // TODO: Update diag based on row operation // FIXME: Which order is correct?
-            for(auto v : diag.getNeighbourVertices(r.second)) { // FIXME: Only take left-side neighbours
+            for(auto v : diag.getNeighbourVertices(r.second)) {
+
+                if( std::find(outputs.begin(), outputs.end(), v) != outputs.end() ) {
+                    continue;
+                }
+
+                if( std::find(frontier.begin(), frontier.end(), v) != frontier.end() ) {
+                    continue;
+                }
+
                 if(diag.connected(v, r.first)) {
                     diag.removeEdge(v, r.first);
                 }
                 else {
-                    if(diag.type(v) == zx::VertexType::Boundary) { // TODO: v is an input
-
+                    if(diag.type(v) == zx::VertexType::Boundary) { // v is an input
+                        auto new_v = diag.insertIdentity(r.second, v);
+                        if(new_v) {
+                            diag.addEdge(r.first, *new_v, zx::EdgeType::Hadamard);
+                        }
                     }
                     else {
-                        diag.addEdge(r.first, v), zx::EdgeType::Hadamard;
+                        diag.addEdge(r.first, v, zx::EdgeType::Hadamard);
                     }
                 }
             }
         }
         
-        for(int i = 0; i < ws.size(); ++i) {
+        for(size_t i = 0; i < ws.size(); ++i) {
             zx::Vertex v = ws_neighbours[i];
             zx::Vertex w = ws[i];
             circuit.h(diag.qubit(v));
@@ -617,7 +630,7 @@ namespace zx {
             
         }
 
-        std::cout << "Frontier:" << std::endl;
+        /* std::cout << "Frontier:" << std::endl;
         printVector(frontier);
 
         std::set<std::pair<Vertex, Vertex>> ws_edges = getEdgesBetweenVertices(diag, ws);
@@ -628,8 +641,8 @@ namespace zx {
             dd::Qubit qv = diag.qubit(e.second);
             circuit.z(diag.qubit(e.first), dd::Control{qv});
             diag.removeEdge(e.first, e.second);
-        }
-        processFrontier(diag, frontier, circuit);
+        } */
+        processFrontier(diag, frontier, outputs, circuit);
         return true;
     }
 
@@ -637,21 +650,21 @@ namespace zx {
         std::cout << "Setting up...\n";
         qc::QuantumComputation qc{};
         qc.addQubitRegister(4U);
-        qc.z(0, 3_pc);
+        /* qc.z(0, 3_pc);
         qc.z(1, 2_pc);
         qc.h(3);
         qc.phase(1, dd::PI_2);
         qc.phase(0, dd::PI_2);
         
-        qc.x(0);
+        qc.x(0); */
         qc.x(1);
-        qc.h(3);
-        qc.x(3, 2_pc);
+        qc.h(3); 
+        qc.x(3, 2_pc); 
         qc.t(0);
         qc.t(1);
         qc.t(2);
-        qc.tdag(3);
-        qc.x(1, 0_pc);
+        /*qc.tdag(3);
+         qc.x(1, 0_pc);
         qc.x(3, 2_pc);
         qc.x(0, 3_pc);
         qc.x(2, 1_pc);
@@ -665,14 +678,17 @@ namespace zx {
         qc.x(3, 2_pc);
         qc.s(3);
         qc.x(0, 3_pc);
-        qc.h(3);
+        qc.h(3); */
         qc.dump("D:/Uni/Masterarbeit/qcec/original.qasm");
 
         std::cout << "Circuit to extract:" << std::endl;
         std::cout << qc << std::endl;
         zx::ZXDiagram zxDiag = zx::FunctionalityConstruction::buildFunctionality(&qc);
         zx::fullReduce(zxDiag);
-        qc::QuantumComputation& qc_extracted = extract(zxDiag);
+        qc::QuantumComputation qc_extracted = qc::QuantumComputation(zxDiag.getNQubits());
+        extract(qc_extracted, zxDiag);
+        std::cout << "Finished Circuit" << std::endl;
+        std::cout << qc_extracted << std::endl;
         qc_extracted.dump("D:/Uni/Masterarbeit/qcec/extracted.qasm");
 
         /* ec::Configuration config{};
