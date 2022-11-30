@@ -591,7 +591,7 @@ namespace zx {
             circuit.x(diag.qubit(r.first), dd::Control{control}); // FIXME: Which order is correct?
 
             // TODO: Update diag based on row operation // FIXME: Which order is correct?
-            for(auto v : diag.getNeighbourVertices(r.second)) {
+            for(auto v : diag.getNeighbourVertices(r.first)) {
 
                 if( std::find(outputs.begin(), outputs.end(), v) != outputs.end() ) {
                     continue;
@@ -601,18 +601,18 @@ namespace zx {
                     continue;
                 }
 
-                if(diag.connected(v, r.first)) {
-                    diag.removeEdge(v, r.first);
+                if(diag.connected(v, r.second)) {
+                    diag.removeEdge(v, r.second);
                 }
                 else {
                     if(diag.type(v) == zx::VertexType::Boundary) { // v is an input
-                        auto new_v = diag.insertIdentity(r.second, v);
+                        auto new_v = diag.insertIdentity(r.first, v);
                         if(new_v) {
-                            diag.addEdge(r.first, *new_v, zx::EdgeType::Hadamard);
+                            diag.addEdge(r.second, *new_v, zx::EdgeType::Hadamard);
                         }
                     }
                     else {
-                        diag.addEdge(r.first, v, zx::EdgeType::Hadamard);
+                        diag.addEdge(r.second, v, zx::EdgeType::Hadamard);
                     }
                 }
             }
@@ -684,7 +684,8 @@ namespace zx {
         std::cout << "Circuit to extract:" << std::endl;
         std::cout << qc << std::endl;
         zx::ZXDiagram zxDiag = zx::FunctionalityConstruction::buildFunctionality(&qc);
-        zx::fullReduce(zxDiag);
+        //zx::fullReduce(zxDiag);
+        zx::cliffordSimp(zxDiag);
         qc::QuantumComputation qc_extracted = qc::QuantumComputation(zxDiag.getNQubits());
         extract(qc_extracted, zxDiag);
         std::cout << "Finished Circuit" << std::endl;
