@@ -197,25 +197,25 @@ namespace zx {
                         //diag.removeEdge(v, w); 
                         edge.type = EdgeType::Simple;
                     }
-                    size_t j = it - inputs.begin();
-                    if( j != i) {
-                        std::cout << "Found swap at " << i << " , " << j << std::endl;
+                    //size_t j = it - inputs.begin();
+                    if( diag.qubit(w) != diag.qubit(v)) {
+                        std::cout << "Found swap at " << diag.qubit(v) << " , " << diag.qubit(w) << std::endl;
                         leftover_swaps = true;
                     }
-                    swaps[i] = j;
+                    swaps[diag.qubit(v)] = diag.qubit(w);
                     break;
                 }
             } 
             //if(inputs[])
         }
 
-        /* if(leftover_swaps) { // FIXME: There appears to be a bug...
+        if(leftover_swaps) { // FIXME: There appears to be a bug...
             std::cout << "Creating swaps... " << std::endl;
             // Check for swaps
             for(auto s : permutation_as_swaps(swaps)) {
                 circuit.swap(s.first, s.second);
             }
-        } */
+        }
         
 
         circuit.reverse();
