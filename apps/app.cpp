@@ -4,6 +4,7 @@
  */
 
 #include "QuantumComputation.hpp"
+#include "zx/Extraction.hpp"
 
 #include <algorithm>
 #include <functional>
@@ -25,6 +26,11 @@ void show_usage(const std::string& name) {
 }
 
 int main(int argc, char** argv) {
+    std::cout << "Testing Extraction!";
+    zx::testExtraction();
+    return 0;
+
+
     if (argc != 3 && argc != 5) {
         show_usage(argv[0]);
         return 1;

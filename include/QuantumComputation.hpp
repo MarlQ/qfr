@@ -238,6 +238,10 @@ namespace qc {
             return qc;
         }
 
+        void reverse() {
+            std::reverse(ops.begin(), ops.end());
+        }
+
         [[nodiscard]] virtual std::size_t         getNops() const { return ops.size(); }
         [[nodiscard]] dd::QubitCount              getNqubits() const { return nqubits + nancillae; }
         [[nodiscard]] dd::QubitCount              getNancillae() const { return nancillae; }
