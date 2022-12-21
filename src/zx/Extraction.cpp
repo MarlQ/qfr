@@ -45,6 +45,13 @@ namespace zx {
         std::cout << std::endl;
     }
 
+    void printVector(std::vector<dd::Qubit> vec) {
+        for(int const& v : vec) {
+            std::cout << v << " ,";
+        }
+        std::cout << std::endl;
+    }
+
     void printVector(std::vector<int> vec) {
         for(auto const& v : vec) {
             std::cout << v << " ,";
@@ -106,7 +113,7 @@ namespace zx {
     }
 
 
-    bool contains(std::vector<size_t> vec, size_t val) {
+    bool contains(std::vector<size_t> vec, size_t val) {        // TODO: isIn is already implemented in ZXDiagram
         return std::find(vec.begin(), vec.end(), val) != vec.end();
     }
 
@@ -231,9 +238,10 @@ namespace zx {
             extractCNOT(diag, frontier, outputs, circuit);
             processFrontier(diag, frontier, outputs, circuit);
             std::cout << "Iteration " << i << std::endl;
-            std::cout << "Current Circuit" << std::endl;
-            std::cout << circuit << std::endl;
+            //std::cout << "Current Circuit" << std::endl;
+            //std::cout << circuit << std::endl;
             i++;
+            //if(i == 6) exit(0);
         };
 
        
@@ -406,9 +414,10 @@ namespace zx {
                         rowOperations.emplace_back(std::pair<int, int>{j, i});
                         break;
                     }
-                    else if(j == n-1) { // FIXME: Just continue...
-                        std::cout << "Giving up!" << std::endl;
-                        return rowOperations;
+                    else if(j == n-1) {
+                        /* std::cout << "Giving up!" << std::endl;
+                        return rowOperations; */
+                        goto nextRow; // Not amazing, but faster than using functions
                     }
                 }
             }
@@ -423,6 +432,8 @@ namespace zx {
                     rowOperations.emplace_back(std::pair<int, int>{i, j});
                 }
             }
+            nextRow: ;
+
         }
         // TODO: Remove duplicates
         // Do (2,1) and (1,2) remove each other?
@@ -452,7 +463,7 @@ namespace zx {
     void processFrontier(zx::ZXDiagram& diag, std::vector<zx::Vertex>& frontier, std::vector<zx::Vertex>& outputs, qc::QuantumComputation& circuit) {
         std::cout << "Processing Frontier... " << std::endl;
          auto inputs = diag.getInputs();
-        std::cout << "Inputs:" << std::endl;
+        /* std::cout << "Inputs:" << std::endl;
         printVector(inputs);
 
         std::cout << "Frontier:" << std::endl;
@@ -471,9 +482,14 @@ namespace zx {
         for(  auto v : diag.getEdges() ) {
             std::cout << "(" << v.first << ", " << v.second << "), ";
         }
-        std::cout << std::endl;
+        std::cout << std::endl; */
 
         std::map<zx::Vertex, int> new_frontier;
+        std::cout << "Old Frontier qubits " << std::endl;
+        for(auto yy : frontier) {
+            std::cout << diag.qubit(yy) << " , ";
+        }
+        std::cout << std::endl;
 
         for(auto const& v : frontier) {
             std::cout << "Vertex: " << v<< std::endl;
@@ -559,7 +575,7 @@ namespace zx {
             diag.addEdge(last_in_chain, output, edgeType);
             
             if(!contains(inputs, last_in_chain)) {
-                new_frontier[ v ] = last_in_chain; // IMPROVE: Should be v_qubit, but that does not work unless frontier is a map (because removeVertex denies the possibility of invoking qubit(v))
+                new_frontier[ v ] = last_in_chain; // IMPROVE: Should be v_qubit, but that does not work unless frontier is a map
             }
             else {
                 new_frontier[ v ] = -1;
@@ -570,6 +586,7 @@ namespace zx {
         }
         std::cout << "Old Frontier:" << std::endl;
         printVector(frontier);
+        
         if(new_frontier.size() > 0) {
             std::cout << "Frontier Changes:" << std::endl;
             printVector(new_frontier);
@@ -582,6 +599,26 @@ namespace zx {
         }     
         std::cout << "New Frontier:" << std::endl;
         printVector(frontier);
+
+
+
+        std::cout << "New Frontier qubits " << std::endl;
+        std::vector<dd::Qubit> fq;
+        for(auto yy : frontier) {
+            fq.emplace_back(diag.qubit(yy));
+        }
+
+        
+        // FIXME:
+        std::sort(fq.begin(), fq.end());
+        printVector(fq);
+        const auto duplicate = std::adjacent_find(fq.begin(), fq.end());
+        if (duplicate != fq.end()) {
+            std::cout << "Duplicate element = " << (int) *duplicate << std::endl;
+            //exit(0);
+        }
+
+        
     }
 
     void extractCNOT(zx::ZXDiagram& diag, std::vector<zx::Vertex>& frontier, std::vector<zx::Vertex>& outputs, qc::QuantumComputation& circuit) {
@@ -601,6 +638,8 @@ namespace zx {
                 return;
             }
         }
+        std::cout << "Current Circuit" << std::endl;
+        std::cout << circuit << std::endl;
 
         // OLD: Check for remaining vertices
         /* for(auto v : verts) {
@@ -665,18 +704,45 @@ namespace zx {
 
         if(ws.size() <= 0) {
             std::cout << "Ws is 0" << std::endl;
-            // TODO: Implement
-            return;
-            while(true) {
-                auto neighbours = diag.getConnectedSet(frontier, outputs);
-                if(neighbours.size() <= 0) break;
-
-
-            }
             
+            // Extract YZ-spiders
+            for(auto v : frontier_neighbours) {
+                auto v_neighbours = diag.getNeighbourVertices(v);
+                if(v_neighbours.size() == 1) {
+                    std::cout << "Vertex with only one neighbour found: " << v << " with phase " << diag.phase(v_neighbours[0]) << std::endl;
+                    auto w = v_neighbours[0];
+                    if(diag.phase(w).isZero()) { // Phase-gadget found
+                        
+                        auto w_neighbours = diag.getNeighbourVertices(w);
 
-            //processFrontier(diag, frontier, outputs, circuit);
-            return; // FIXME: Is this correct?
+                        // Extract CNOT-ladder -> phase gate --> reverse CNOT-ladder
+                        // IMPROVE: Implement Pivot
+                        std::vector<dd::Qubit> w_neighbour_qubits;
+
+                        for(auto n : w_neighbours) {
+                            if(n != v) {
+                                w_neighbour_qubits.emplace_back(diag.qubit(n)); //FIXME: Qubit not correct
+                            }
+                        }
+                        for(int i = w_neighbour_qubits.size() - 1; i < 1; i++) {
+                            circuit.x(w_neighbour_qubits[i-1], dd::Control{w_neighbour_qubits[i]});
+                        }
+                        circuit.phase(w_neighbour_qubits[0], diag.phase(v).getConst().toDouble());
+                        for(int i = 0; i < w_neighbour_qubits.size() - 1; i++) {
+                            circuit.x(w_neighbour_qubits[i], dd::Control{w_neighbour_qubits[i + 1]});
+                        }
+
+                        // Remove YZ-spider
+                        // TODO: Implement
+                        diag.removeVertex(v); //FIXME: Can this cause problems?
+                        diag.removeVertex(w);
+                        frontier.erase(std::remove(frontier.begin(), frontier.end(), w), frontier.end());
+                        std::cout << "Removing YZ-spider " << v << std::endl;
+                        std::cout << "What about " << w << std::endl;
+                    }
+                }
+            }
+            return;
         }
 
         //adjMatrix = getAdjacencyMatrix(diag, frontier, ws);
@@ -715,7 +781,9 @@ namespace zx {
                 }
             }
         }
-        
+        std::cout << "Current Circuit" << std::endl;
+        std::cout << circuit << std::endl;
+        exit(0);
         // BUG: There is probably a bug here..
         /* for(size_t i = 0; i < ws.size(); ++i) {
             zx::Vertex v = ws_neighbours[i];
@@ -760,7 +828,8 @@ namespace zx {
     void testExtraction() {
         std::cout << "Setting up...\n";
         qc::QuantumComputation qc{};
-        qc.addQubitRegister(4U);
+        qc.import("D:/Uni/Masterarbeit/qcec/vbe_adder_3.qasm");
+        /* qc.addQubitRegister(4U);
         qc.z(0, 3_pc);
         qc.z(1, 2_pc);
         qc.h(3);
@@ -786,7 +855,7 @@ namespace zx {
         qc.z(3, 2_pc); */
         //qc.z(2, 3_pc);
         //qc.y(3, 2_pc);
-        qc.tdag(0);
+       /*  qc.tdag(0);
         qc.tdag(1);
         qc.tdag(2);
         qc.t(3);
@@ -794,18 +863,21 @@ namespace zx {
         qc.x(3, 2_pc);
         qc.s(3);
         qc.x(0, 3_pc);
-        qc.h(3);
+        qc.h(3); */
         qc.dump("D:/Uni/Masterarbeit/qcec/original.qasm");
 
         std::cout << "Circuit to extract:" << std::endl;
         std::cout << qc << std::endl;
         zx::ZXDiagram zxDiag = zx::FunctionalityConstruction::buildFunctionality(&qc);
-        zx::fullReduce(zxDiag);
-        //zx::cliffordSimp(zxDiag);
+        //zx::fullReduce(zxDiag);
+        zxDiag.toGraphlike();
+        zx::cliffordSimp(zxDiag);
         qc::QuantumComputation qc_extracted = qc::QuantumComputation(zxDiag.getNQubits());
         extract(qc_extracted, zxDiag);
-        std::cout << "Finished Circuit" << std::endl;
+        /* std::cout << "Finished Circuit" << std::endl;
         std::cout << qc_extracted << std::endl;
+        std::cout << "Circuit to extract:" << std::endl;
+        std::cout << qc << std::endl; */
         qc_extracted.dump("D:/Uni/Masterarbeit/qcec/extracted.qasm");
 
         /* ec::Configuration config{};
