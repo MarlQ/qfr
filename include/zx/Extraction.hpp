@@ -22,7 +22,7 @@
 namespace zx {
 
     void extract(qc::QuantumComputation& circuit, zx::ZXDiagram& diag);
-    void testExtraction();
+    void testExtraction(std::string filename="vbe_adder_3.qasm", std::string measurementGroup="1");
     void extractCNOT(zx::ZXDiagram& diag, std::map<zx::Qubit, zx::Vertex>& frontier, std::vector<zx::Vertex>& outputs, qc::QuantumComputation& circuit);
     void processFrontier(zx::ZXDiagram& diag, std::map<zx::Qubit, zx::Vertex>& frontier, std::vector<zx::Vertex>& outputs, qc::QuantumComputation& circuit);
     std::vector<std::pair<int, int>> permutation_as_swaps(std::map<int, int> perm);
