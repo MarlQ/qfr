@@ -212,6 +212,15 @@ namespace zx {
     }
  */
 
+    std::vector<Vertex> mapToVector(std::map<zx::Qubit, zx::Vertex>& vertices) {
+        std::vector<Vertex> retVerts;
+
+        for( std::map<zx::Qubit, zx::Vertex>::iterator it = vertices.begin(); it != vertices.end(); ++it ) {
+            retVerts.push_back( it->second );
+         }
+        return retVerts;
+    }
+
 
     void extractRZ_CZ(zx::ZXDiagram& diag, std::map<zx::Qubit, zx::Vertex>& frontier, qc::QuantumComputation& circuit) {
         if(DEBUG)std::cout << "Extracting RZ and CZ gates..." << std::endl;
