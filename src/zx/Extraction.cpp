@@ -150,7 +150,7 @@ namespace zx {
             std::cout << t.first << " = " << t.second / 1000000.0 << "[ms]" << std::endl;
         }
 
-        std::ofstream file("D:/Uni/Masterarbeit/measurements.csv", std::ios::app);
+        std::ofstream file("H:/Uni/Masterarbeit/measurements.csv", std::ios::app);
         auto now = std::chrono::system_clock::now();
         std::time_t now_c = std::chrono::system_clock::to_time_t(now);
         std::stringstream date;
@@ -234,9 +234,9 @@ namespace zx {
         
         begin = std::chrono::steady_clock::now();
         // Extract connected frontier spiders as CZ gates
-        std::set<std::pair<Vertex, Vertex>> frontier_edges = getEdgesBetweenVertices(diag, frontier);
-        if(DEBUG)std::cout << "Frontier Edges:" << std::endl;
-        if(DEBUG)printVector(frontier_edges);
+        //std::set<std::pair<Vertex, Vertex>> frontier_edges = getEdgesBetweenVertices(diag, frontier);
+        //if(DEBUG)std::cout << "Frontier Edges:" << std::endl;
+        //if(DEBUG)printVector(frontier_edges);
         
         for(auto v : frontier) { // IMPROVE: Can this be within the same for loop as the prior?
             for(zx::Edge e : diag.incidentEdges(v.second)) {
@@ -260,10 +260,9 @@ namespace zx {
     std::map<zx::Qubit, zx::Vertex> initFrontier(zx::ZXDiagram& diag) {
         std::map<zx::Qubit, zx::Vertex> frontier;
         auto outputs = diag.getOutputs();
-        auto inputs = diag.getInputs();
         for(size_t i = 0; i < outputs.size(); ++i) {
             auto v = diag.getNeighbourVertices(outputs[i])[0];
-            if( !contains(inputs, v) ) {
+            if( !diag.isInput(v) ) {
                 frontier[i] = v;
             }
         }
@@ -296,12 +295,12 @@ namespace zx {
         if(DEBUG)std::cout << "Outputs:" << std::endl;
         if(DEBUG)printVector(outputs);
 
-        for(auto v : frontier) {
+        for(auto v : frontier) { // IMPROVE: Iterate over outputs
             auto incident = diag.incidentEdges(v.second);
             for(auto edge : incident) {
                 zx::Vertex w = edge.to;
 
-                if( !contains(outputs, w) ) {
+                if( !diag.isOutput(w) ) {
                     continue;
                 }
                     
@@ -808,7 +807,7 @@ namespace zx {
             if(uneven_hadamard) {
                 circuit.h(v.first);
                 if(DEBUG)std::cout << "Adding Hadamard at " << v.first << std::endl;
-                //diag.setEdgeType(v, w, zx::EdgeType::Simple); // CHECK: Is this a good way to do this?
+                //diag.setEdgeType(v.second, chain[0], zx::EdgeType::Simple); // CHECK: Is this a good way to do this?
             }
             if(DEBUG)std::cout << "Chain found:" << std::endl;
             if(DEBUG)printVector(chain);
@@ -1126,7 +1125,7 @@ namespace zx {
         if(DEBUG)std::cout << "Setting up...\n";
         qc::QuantumComputation qc{};
         std::cout << "Circuit " << filename << ":" << std::endl;
-        qc.import("D:/Uni/Masterarbeit/qcec/" + filename);
+        qc.import("H:/Uni/Masterarbeit/qcec/" + filename);
         /* qc.addQubitRegister(4U);
         qc.z(0, 3_pc);
         qc.z(1, 2_pc);
@@ -1162,7 +1161,7 @@ namespace zx {
         qc.s(3);
         qc.x(0, 3_pc);
         qc.h(3); */
-        qc.dump("D:/Uni/Masterarbeit/qcec/original.qasm");
+        qc.dump("H:/Uni/Masterarbeit/qcec/original.qasm");
 
         if(DEBUG)std::cout << "Circuit to extract:" << std::endl;
         if(DEBUG)std::cout << qc << std::endl;
@@ -1174,14 +1173,14 @@ namespace zx {
 
         //zx::fullReduce(zxDiag);
         zxDiag.toGraphlike();
+        
 
         std::cout << "Simplifying" << std::endl;
         begin = std::chrono::steady_clock::now();
-        zx::fullReduce(zxDiag);
+        zx::interiorCliffordSimp(zxDiag);
+        //zx::fullReduce(zxDiag);
         end = std::chrono::steady_clock::now();
         addMeasurement("interiorCliffordSimp", begin, end);
-        printMeasurements(measurementGroup, filename);
-        return;
 
         std::cout << "Extracting" << std::endl;
         qc::QuantumComputation qc_extracted = qc::QuantumComputation(zxDiag.getNQubits());
@@ -1190,11 +1189,11 @@ namespace zx {
         end = std::chrono::steady_clock::now();
         addMeasurement("extract", begin, end);
 
-        //std::cout << "Finished Circuit" << std::endl;
-        //std::cout << qc_extracted << std::endl;
+        std::cout << "Finished Circuit" << std::endl;
+        std::cout << qc_extracted << std::endl;
         //std::cout << "Circuit to extract:" << std::endl;
         //std::cout << qc << std::endl;
-        qc_extracted.dump("D:/Uni/Masterarbeit/qcec/extracted.qasm");
+        qc_extracted.dump("H:/Uni/Masterarbeit/qcec/extracted.qasm");
         std::cout << "Circuit " << filename << ":" << std::endl;
         
         printMeasurements(measurementGroup, filename);
