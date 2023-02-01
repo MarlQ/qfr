@@ -368,10 +368,11 @@ namespace zx {
 
         std::map<int, int> swaps;
         bool leftover_swaps = false;
+        
 
-        for(auto v : frontier) {
+        for(int q = 0; q < outputs.size(); ++q) {
             
-            auto incident = diag.incidentEdges(v.second);
+            auto incident = diag.incidentEdges(outputs[q]);
 
             for(auto &edge : incident) {
                 zx::Vertex w = edge.to;
@@ -379,17 +380,18 @@ namespace zx {
                 if( it != inputs.end()) {
                     // Check if edge to input is hadamard
                     if(edge.type == zx::EdgeType::Hadamard) {
-                        circuit.h(v.first);
+                        circuit.h(q);
                         //diag.removeEdge(v, w); 
-                        edge.type = EdgeType::Simple;
+                        diag.setEdgeType(outputs[q], edge.to, EdgeType::Simple);
+                        //edge.type = EdgeType::Simple;
                     }
                     //size_t j = it - inputs.begin();
                     auto qw = (zx::Qubit) (it - inputs.begin()); // FIXME: Not sure if this is correct
-                    if( qw != v.first) {
-                        if(DEBUG)std::cout << "Found swap at " << v.first << " , " << qw << std::endl;
+                    if( qw != q) {
+                        if(DEBUG)std::cout << "Found swap at " << q << " , " << qw << std::endl;
                         leftover_swaps = true;
                     }
-                    swaps[ v.first ] = qw;
+                    swaps[ q ] = qw;
                     break;
                 }
             } 
