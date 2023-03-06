@@ -21,7 +21,7 @@
 #include <tuple>
 #include <map>
 #include <fstream>
-#define DEBUG false
+#define DEBUG true
 
 /* struct VertexData {
         Col          col;
@@ -220,6 +220,7 @@ std::optional<std::unordered_map<int, int>> find_targets(std::unordered_map<int,
     //target = target; //FIXME: copy?
     int r = conn.size();
     int c = connr.size();
+    std::cout << "Finding targets." << std::endl;
 
     std::unordered_set<int> claimedcols;
     std::unordered_set<int> claimedrows;
@@ -234,7 +235,12 @@ std::optional<std::unordered_map<int, int>> find_targets(std::unordered_map<int,
         bool did_break = false;
         std::unordered_set<int> min_options;
 
+        for(int i = 0; i < 1000; ++i) {
+            min_options.insert(i);
+        }
+
         for(int i = 0; i < r; ++i) {
+            std::cout << "Inner iteration: " << i << std::endl;
             if(claimedrows.count(i)) continue;
 
             std::unordered_set<int> s; // The free columns
@@ -277,19 +283,38 @@ std::optional<std::unordered_map<int, int>> find_targets(std::unordered_map<int,
             }
         }
         if(!did_break) { // Didn't find any forced choices
+            std::cout << "Didn't find any forced choices." << std::endl;
             if(conn.size() == claimedrows.size()) { // FIXME: Equivalent to if not (conn.keys() - claimedrows): ?
+                std::cout << "We are done." << std::endl;
                 return target; // we are done
             }
+            // XXX:
+            std::unordered_set<int> conn_values;
+            for (auto [key, value] : conn) {
+                conn_values.insert(key);
+            }
 
-            if(min_index == -1) throw std::invalid_argument("This shouldn't happen ever");
+            if (conn_values == claimedrows) { // we are done
+                std::cout << "We are done 2.0." << std::endl;
+                exit(0);
+                return target;
+            }
+             std::cout << "Woot 1. " << min_index << std::endl;
+            if(min_index == -1) {
+                std::cout << "This shouldn't happen ever" << std::endl;
+                exit(0);
+            }
+             std::cout << "woot 2." << std::endl;
             // Start depth-first search
+            std::cout << "Copying target." << std::endl;
             std::unordered_map<int, int> tgt = target; //FIXME: copy?
-            for(auto k : min_options) {
+            for(int k : min_options) {
+                std::cout << "Iterating... " << k << " " << min_index << std::endl;
                 tgt[k] = min_index;
                 auto new_target = find_targets(conn, connr, tgt);
                 if(new_target) return new_target;
             }
-            return;
+            return target;
         }
     }
 }
@@ -310,21 +335,29 @@ std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
 
     // connections: row -> column indices with non-zero elements
     // connections: column -> row indices with non-zero elements
-
+    std::cout << "Finding targets..." << std::endl;
     std::optional<std::unordered_map<int, int>> target_opt = find_targets(connections, connectionsr);
     std::unordered_map<int, int> target;
     if (!target_opt) target = std::unordered_map<int, int>();
     else target = *target_opt;
+    std::cout << "Found targets!" << std::endl;
 
-    std::unordered_set<int> left, right;
-    for (int i = 0; i < cols; ++i) {
-        if (target.count(i) == 0) {
-            left.insert(i);
+    std::unordered_set<int> target_values;
+    for (const auto& elem : target) {
+        target_values.insert(elem.second);
+    }
+
+    std::vector<int> left;
+    for (int i = 0; i < cols; i++) {
+        if (target_values.find(i) == target_values.end()) {
+            left.push_back(i);
         }
     }
-    for (int i = 0; i < cols; ++i) {
-        if (target.count(i) != 0) {
-            right.insert(target[i]);
+
+    std::vector<int> right;
+    for (int i = 0; i < cols; i++) {
+        if (target.find(i) == target.end()) {
+            right.push_back(i);
         }
     }
 
@@ -1106,6 +1139,25 @@ int yzcounter = 0;
 
         if(DEBUG)std::cout << "Adjacency Matrix:" << std::endl;
         if(DEBUG)printMatrix(adjMatrix);
+
+        bool perm_optimization = true;
+        if(perm_optimization) {
+            if(DEBUG) std::cout << "Finding optimal column swaps" << std::endl;
+            std::unordered_map<int, int> perm  = column_optimal_swap(adjMatrix);
+            std::unordered_map<int, int> perm_swapped;
+            for (const auto& [k, v] : perm) {
+                perm_swapped[v] = k;
+            }
+            std::vector<size_t> neighbors2;
+            for(int i = 0; i < frontier_neighbours.size(); ++i) {
+                neighbors2.emplace_back(frontier_neighbours[perm_swapped[i]]);
+            }
+            if(DEBUG)std::cout << "New neighbors:" << std::endl;
+            if(DEBUG)printVector(neighbors2);
+            adjMatrix = getAdjacencyMatrix(diag, frontier_values, neighbors2);
+            if(DEBUG)std::cout << "New Adjacency Matrix:" << std::endl;
+            if(DEBUG)printMatrix(adjMatrix);
+        }
 
         // Gauss reduction on biadjacency matrix
         begin = std::chrono::steady_clock::now();
