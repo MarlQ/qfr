@@ -8,6 +8,7 @@
 #include "Simplify.hpp"
 #include "dd/Control.hpp"
 #include "zx/FunctionalityConstruction.hpp"
+#include "CircuitOptimizer.hpp"
 #include "QuantumComputation.hpp"
 //#include "EquivalenceCheckingManager.hpp"
 //#include "gtest/gtest.h"
@@ -212,6 +213,131 @@ namespace zx {
     }
  */
 
+
+//using Set = std::unordered_set<int>;
+//using Dict = std::unordered_map<int, Set>;
+std::optional<std::unordered_map<int, int>> find_targets(std::unordered_map<int, std::unordered_set<int>> conn, std::unordered_map<int, std::unordered_set<int>> connr, std::unordered_map<int, int> target = {}) {
+    //target = target; //FIXME: copy?
+    int r = conn.size();
+    int c = connr.size();
+
+    std::unordered_set<int> claimedcols;
+    std::unordered_set<int> claimedrows;
+
+    for (auto [key, value] : target) {
+        claimedcols.insert(key);
+        claimedrows.insert(value);
+    }
+
+    while(true) {
+        int min_index = -1;
+        bool did_break = false;
+        std::unordered_set<int> min_options;
+
+        for(int i = 0; i < r; ++i) {
+            if(claimedrows.count(i)) continue;
+
+            std::unordered_set<int> s; // The free columns
+            for(auto j : conn[i]) {
+                if( !claimedcols.count(j)) s.insert(j);
+            }
+
+            if(s.size() == 1) {
+                int j = *s.begin(); // FIXME: Should this remove the element from s ( pop() )?
+                target[j] = i;
+                claimedcols.insert(j);
+                claimedrows.insert(i);
+                did_break = true;
+                break;
+            }
+
+            if(s.empty()) return std::nullopt; // contradiction
+
+            bool found_col = false;
+            for(auto j : s) {
+                std::unordered_set<int> t;
+                for(auto k : connr[j]) {
+                    if(!claimedrows.count(k)) t.insert(k);
+                }
+                if(t.size() == 1) { // j can only be connected to i
+                    target[j] = i;
+                    claimedcols.insert(j);
+                    claimedrows.insert(i);
+                    found_col = true;
+                    break;
+                }
+            }
+            if(found_col) {
+                did_break = true;
+                break;
+            }
+            if(s.size() < min_options.size()) {
+                min_index = i;
+                min_options = s;
+            }
+        }
+        if(!did_break) { // Didn't find any forced choices
+            if(conn.size() == claimedrows.size()) { // FIXME: Equivalent to if not (conn.keys() - claimedrows): ?
+                return target; // we are done
+            }
+
+            if(min_index == -1) throw std::invalid_argument("This shouldn't happen ever");
+            // Start depth-first search
+            std::unordered_map<int, int> tgt = target; //FIXME: copy?
+            for(auto k : min_options) {
+                tgt[k] = min_index;
+                auto new_target = find_targets(conn, connr, tgt);
+                if(new_target) return new_target;
+            }
+            return;
+        }
+    }
+}
+
+std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
+    int rows = matrix.size();
+    int cols = matrix[0].size();
+
+    std::unordered_map<int, std::unordered_set<int>> connections, connectionsr;
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            if (matrix[i][j]) {
+                connections[i].insert(j);
+                connectionsr[j].insert(i);
+            }
+        }
+    }
+
+    // connections: row -> column indices with non-zero elements
+    // connections: column -> row indices with non-zero elements
+
+    std::optional<std::unordered_map<int, int>> target_opt = find_targets(connections, connectionsr);
+    std::unordered_map<int, int> target;
+    if (!target_opt) target = std::unordered_map<int, int>();
+    else target = *target_opt;
+
+    std::unordered_set<int> left, right;
+    for (int i = 0; i < cols; ++i) {
+        if (target.count(i) == 0) {
+            left.insert(i);
+        }
+    }
+    for (int i = 0; i < cols; ++i) {
+        if (target.count(i) != 0) {
+            right.insert(target[i]);
+        }
+    }
+
+    auto left_it = left.begin(), right_it = right.begin();
+     while (left_it != left.end() && right_it != right.end()) {
+        target[*right_it] = *left_it;
+        ++left_it;
+        ++right_it;
+    }
+
+    return target;
+}
+
     std::vector<Vertex> mapToVector(std::map<zx::Qubit, zx::Vertex>& vertices) {
         std::vector<Vertex> retVerts;
 
@@ -281,7 +407,7 @@ namespace zx {
 
     void extract(qc::QuantumComputation& circuit, zx::ZXDiagram& diag) {
         diag.toGraphlike(); // IMPROVE: Not necessarily necessary
-
+        diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test.json");
         //  IMPROVE: Create a copy of diag
 
         // Create empty circuit
@@ -331,22 +457,22 @@ namespace zx {
 
         int i = 1;
 
-        while(frontier.size() > 0) {
+        while(frontier.size() > 0) {    
             auto begin = std::chrono::steady_clock::now();
             extractRZ_CZ(diag, frontier, circuit);
             auto end = std::chrono::steady_clock::now();
             addMeasurement("extract:extractRZ_CZ", begin, end);
-
+            
             begin = std::chrono::steady_clock::now();
             extractCNOT(diag, frontier, outputs, circuit);
             end = std::chrono::steady_clock::now();
             addMeasurement("extract:extractCNOT", begin, end);
-
+            
             begin = std::chrono::steady_clock::now();
             processFrontier(diag, frontier, outputs, circuit);
             end = std::chrono::steady_clock::now();
             addMeasurement("extract:processFrontier", begin, end);
-            if(DEBUG)std::cout << "Iteration " << i << std::endl;
+            if(DEBUG)std::cout << "Iteration " << i << std::endl;           
             //std::cout << "Current Circuit" << std::endl;
             //std::cout << circuit << std::endl;
             i++;
@@ -405,7 +531,7 @@ namespace zx {
                 }
             } 
         }
-
+        diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(frontier));
         if(leftover_swaps) {
             if(DEBUG)std::cout << "Creating swaps... " << std::endl;
             // Check for swaps
@@ -416,7 +542,8 @@ namespace zx {
         
 
         circuit.reverse();
-
+        qc::CircuitOptimizer::cancelCNOTs(circuit);
+        qc::CircuitOptimizer::cancelCNOTs(circuit);
         return;
     }
 
@@ -827,17 +954,18 @@ namespace zx {
                 if(DEBUG)std::cout << "Removing Vertex: " << chain[i] << std::endl;
                 diag.removeVertex(chain[i]);
             }
-
+         
             auto edgeType = diag.getEdge(v.second,output)->type; //CHECK: isn't this always Simple, as we removed hadamards at the start?
             auto last_in_chain = chain[chain.size() - 1];
             //auto v_qubit = v.first;
+            if(DEBUG)std::cout << "Edge type is " << ((edgeType == EdgeType::Simple) ? "S" : "H") << std::endl;
             if(DEBUG)std::cout << "Removing Vertex: " << v.second << std::endl;
             diag.removeVertex(v.second);
             if(DEBUG)std::cout << "Adding Edge: (" << last_in_chain << "," << output << ")" << std::endl;
             diag.addEdge(last_in_chain, output, edgeType);
             
             if(!contains(inputs, last_in_chain)) {
-                new_frontier[ v.first ] = (int) last_in_chain; // FIXME: Potentially problematic cast
+                new_frontier[ v.first ] = (int) last_in_chain;
             }
             else {
                 new_frontier[ v.first ] = -1;
@@ -881,6 +1009,41 @@ namespace zx {
         return frontier_neighbors;
     }
 
+    /* void filter_duplicate_cnots(std::vector<std::pair<zx::Qubit, zx::Qubit>> cnots) {
+        // Find maximum qubit
+        zx::Qubit max_qubit = std::numeric_limits<zx::Qubit>::min(); // set initial max value to the smallest possible integer
+        for (const auto& p : cnots) {
+            max_qubit = std::max(max_qubit, std::max(p.first, p.second));
+        }
+        // Build circuit
+        qc::QuantumComputation circuit = qc::QuantumComputation(max_qubit);
+
+        for(auto r : cnots) { // BUG: Potentially there is a bug here?
+            // From row operation: r.second = r.second + r.first
+
+            auto control_entry = std::next(it, r.second);
+            auto target_entry = std::next(it, r.first);
+
+            auto control_qubit = control_entry->first;
+            auto target_qubit = target_entry->first;
+            if(DEBUG)std::cout << " Entries " << control_qubit << "|" << control_entry->second << " , " << target_qubit << "|" << target_entry->second << std::endl;
+
+            circuit.x(target_qubit, dd::Control{(dd::Qubit) control_qubit});
+            if(DEBUG)std::cout << "Added CNOT (T:" << target_qubit << ", C:" << control_qubit << ")" << std::endl;
+
+            auto ftarg = frontier.at(control_qubit);
+            auto fcont = frontier.at(target_qubit);
+        }
+
+
+        // Simplify circuit
+        qc::CircuitOptimizer::cancelCNOTs(circuit);
+
+        // Return cnots
+
+    } */
+
+int yzcounter = 0;
     void extractCNOT(zx::ZXDiagram& diag, std::map<zx::Qubit, zx::Vertex>& frontier, std::vector<zx::Vertex>& outputs, qc::QuantumComputation& circuit) {
         if(DEBUG)std::cout << "Is CNOT extraction necessary?" << std::endl;
         //bool vertsRemaining = false;
@@ -947,9 +1110,6 @@ namespace zx {
         // Gauss reduction on biadjacency matrix
         begin = std::chrono::steady_clock::now();
         std::vector<std::pair<zx::Qubit, zx::Qubit>> rowOperations = gaussEliminationAlt(adjMatrix);
-        
-        //std::set<std::pair<zx::Qubit, zx::Qubit>> unique_rowOperations(rowOperations.begin(), rowOperations.end()); // CHECK: Is this correct?
-        //rowOperations.assign(unique_rowOperations.begin(), unique_rowOperations.end());
 
         end = std::chrono::steady_clock::now();
         addMeasurement("extract:extractCNOT:gaussElimination", begin, end);
@@ -983,8 +1143,10 @@ namespace zx {
         begin = std::chrono::steady_clock::now();
         if(!singleOneRowExists) {
             if(DEBUG)std::cout << "Ws is 0" << std::endl;
-            exit(0);
-            
+            yzcounter++;
+            if(yzcounter == 3) {
+                exit(0);
+            }
             // Extract YZ-spiders
             for(auto v : frontier_neighbours) {
                 auto v_neighbours = diag.getNeighbourVertices(v);
@@ -997,7 +1159,7 @@ namespace zx {
 
                      if(w_neighbours.size() == 1) { // BUG: Currently this can get input spiders...
                         if(DEBUG)std::cout << "Vertex with only one neighbour found: " << w << " with phase " << diag.phase(w) << std::endl;
-                        if(diag.isInput(w)) {
+                        if(diag.isOutput(w)) {
                             if(DEBUG)std::cout << "ERROR: vertex is input!" << std::endl;
                         }
 
@@ -1022,14 +1184,14 @@ namespace zx {
                                 if(DEBUG)std::cout << "Old spider " << frontier[q] << std::endl;
                                 if(frontier[q] != v) {
                                     if(DEBUG)std::cout << "Old spider " << frontier[q] << " != " << v << std::endl;
-                                    exit(0);
+                                    //exit(0);
                                 }
                                 frontier[q] = w;
 
                                 //frontier.erase(std::remove(frontier.begin(), frontier.end(), w), frontier.end());
                                 //frontier.erase(frontier_neighbour); // FIXME: Should be qubit!
 
-                                if(DEBUG)std::cout << "Removing YZ-spider " << v << std::endl;
+                                //if(DEBUG)std::cout << "Removing YZ-spider " << v << std::endl;
                                 if(DEBUG)std::cout << "New frontier spider is " << w << " on Qubit" << q << std::endl;
                             }
 
@@ -1041,6 +1203,11 @@ namespace zx {
             return;
         }
         end = std::chrono::steady_clock::now();
+
+        // Removing duplicate row operations
+        //filter_duplicate_cnots(rowOperations);
+
+
         addMeasurement("extract:extractCNOT:YZSpiders", begin, end);
         begin = std::chrono::steady_clock::now();
         // Extract CNOTs
@@ -1204,7 +1371,7 @@ namespace zx {
         std::cout << qc_extracted << std::endl;
         //std::cout << "Circuit to extract:" << std::endl;
         //std::cout << qc << std::endl;
-        qc_extracted.dump("H:/Uni/Masterarbeit/qcec/extracted.qasm");
+        qc_extracted.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted.qasm");
         std::cout << "Circuit " << filename << ":" << std::endl;
         
         printMeasurements(measurementGroup, filename);
