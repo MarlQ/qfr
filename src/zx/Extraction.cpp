@@ -21,7 +21,7 @@
 #include <tuple>
 #include <map>
 #include <fstream>
-#define DEBUG true
+#define DEBUG false
 
 /* struct VertexData {
         Col          col;
@@ -220,7 +220,6 @@ std::optional<std::unordered_map<int, int>> find_targets(std::unordered_map<int,
     //target = target; //FIXME: copy?
     int r = conn.size();
     int c = connr.size();
-    std::cout << "Finding targets." << std::endl;
 
     std::unordered_set<int> claimedcols;
     std::unordered_set<int> claimedrows;
@@ -240,7 +239,6 @@ std::optional<std::unordered_map<int, int>> find_targets(std::unordered_map<int,
         }
 
         for(int i = 0; i < r; ++i) {
-            std::cout << "Inner iteration: " << i << std::endl;
             if(claimedrows.count(i)) continue;
 
             std::unordered_set<int> s; // The free columns
@@ -283,9 +281,7 @@ std::optional<std::unordered_map<int, int>> find_targets(std::unordered_map<int,
             }
         }
         if(!did_break) { // Didn't find any forced choices
-            std::cout << "Didn't find any forced choices." << std::endl;
             if(conn.size() == claimedrows.size()) { // FIXME: Equivalent to if not (conn.keys() - claimedrows): ?
-                std::cout << "We are done." << std::endl;
                 return target; // we are done
             }
             // XXX:
@@ -295,21 +291,18 @@ std::optional<std::unordered_map<int, int>> find_targets(std::unordered_map<int,
             }
 
             if (conn_values == claimedrows) { // we are done
-                std::cout << "We are done 2.0." << std::endl;
+                std::cout << "THERE IS A BUG" << std::endl;
                 exit(0);
                 return target;
             }
-             std::cout << "Woot 1. " << min_index << std::endl;
             if(min_index == -1) {
                 std::cout << "This shouldn't happen ever" << std::endl;
                 exit(0);
             }
-             std::cout << "woot 2." << std::endl;
+
             // Start depth-first search
-            std::cout << "Copying target." << std::endl;
             std::unordered_map<int, int> tgt = target; //FIXME: copy?
             for(int k : min_options) {
-                std::cout << "Iterating... " << k << " " << min_index << std::endl;
                 tgt[k] = min_index;
                 auto new_target = find_targets(conn, connr, tgt);
                 if(new_target) return new_target;
@@ -335,12 +328,10 @@ std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
 
     // connections: row -> column indices with non-zero elements
     // connections: column -> row indices with non-zero elements
-    std::cout << "Finding targets..." << std::endl;
     std::optional<std::unordered_map<int, int>> target_opt = find_targets(connections, connectionsr);
     std::unordered_map<int, int> target;
     if (!target_opt) target = std::unordered_map<int, int>();
     else target = *target_opt;
-    std::cout << "Found targets!" << std::endl;
 
     std::unordered_set<int> target_values;
     for (const auto& elem : target) {
@@ -575,8 +566,7 @@ std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
         
 
         circuit.reverse();
-        qc::CircuitOptimizer::cancelCNOTs(circuit);
-        qc::CircuitOptimizer::cancelCNOTs(circuit);
+        qc::CircuitOptimizer::cancelCNOTs(circuit); // TODO: Measure time
         return;
     }
 
@@ -1141,7 +1131,7 @@ int yzcounter = 0;
         if(DEBUG)printMatrix(adjMatrix);
 
         bool perm_optimization = true;
-        if(perm_optimization) {
+        if(perm_optimization) { // TODO: Measure time
             if(DEBUG) std::cout << "Finding optimal column swaps" << std::endl;
             std::unordered_map<int, int> perm  = column_optimal_swap(adjMatrix);
             std::unordered_map<int, int> perm_swapped;
