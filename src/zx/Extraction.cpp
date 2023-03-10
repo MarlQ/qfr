@@ -137,7 +137,8 @@ namespace zx {
         {"extract", 0.0},
         {"extract:extractCNOT:YZSpiders", 0.0},
         {"extract:extractCNOT:biadjacencyMatrix", 0.0},
-        {"extract:extractCNOT:check", 0.0}
+        {"extract:extractCNOT:check", 0.0},
+        {"cancelCNOTs", 0.0}
     };
 
     void addMeasurement(std::string name, std::chrono::steady_clock::time_point begin, std::chrono::steady_clock::time_point end) {
@@ -202,6 +203,7 @@ namespace zx {
         }
         return ret;
     }
+    // TODO: Test times?
     /* Alternative implementation. Seems to be about as fast...
     std::set<std::pair<Vertex, Vertex>> fe;
     for (auto v = frontier.begin(); v != frontier.end(); ++v) {
@@ -213,11 +215,7 @@ namespace zx {
     }
  */
 
-
-//using Set = std::unordered_set<int>;
-//using Dict = std::unordered_map<int, Set>;
 std::optional<std::unordered_map<int, int>> find_targets(std::unordered_map<int, std::unordered_set<int>> conn, std::unordered_map<int, std::unordered_set<int>> connr, std::unordered_map<int, int> target = {}) {
-    //target = target; //FIXME: copy?
     int r = conn.size();
     int c = connr.size();
 
@@ -247,7 +245,7 @@ std::optional<std::unordered_map<int, int>> find_targets(std::unordered_map<int,
             }
 
             if(s.size() == 1) {
-                int j = *s.begin(); // FIXME: Should this remove the element from s ( pop() )?
+                int j = *s.begin();
                 target[j] = i;
                 claimedcols.insert(j);
                 claimedrows.insert(i);
@@ -301,7 +299,7 @@ std::optional<std::unordered_map<int, int>> find_targets(std::unordered_map<int,
             }
 
             // Start depth-first search
-            std::unordered_map<int, int> tgt = target; //FIXME: copy?
+            std::unordered_map<int, int> tgt = target;
             for(int k : min_options) {
                 tgt[k] = min_index;
                 auto new_target = find_targets(conn, connr, tgt);
@@ -432,19 +430,14 @@ std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
     void extract(qc::QuantumComputation& circuit, zx::ZXDiagram& diag) {
         diag.toGraphlike(); // IMPROVE: Not necessarily necessary
         diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test.json");
-        //  IMPROVE: Create a copy of diag
-
-        // Create empty circuit
-        
+        // diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(frontier));
+        //  IMPROVE: Create a copy of diag   
         
         // Initialise frontier
         auto inputs = diag.getInputs();
         auto outputs = diag.getOutputs();
         std::map<zx::Qubit, zx::Vertex> frontier = initFrontier(diag);
 
-        
-
-        
         if(DEBUG)std::cout << "Inputs:" << std::endl;
         if(DEBUG)printVector(inputs);
 
@@ -466,11 +459,7 @@ std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
                 if(edge.type == zx::EdgeType::Hadamard) {
                     if(DEBUG)std::cout << "Adding Hadamard at " << v.first << std::endl;
                     circuit.h(v.first);
-                    //edge.type = zx::EdgeType::Simple;
                     diag.setEdgeType(v.second, w, zx::EdgeType::Simple);
-                    //edge.toggle();
-                    // toggle corresponding edge in other direction
-                    //diag.getEdgePtr(edge.to, v)->toggle();
                 }
                 
             }
@@ -479,7 +468,7 @@ std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
         if(DEBUG)std::cout << "Current Circuit" << std::endl;
         if(DEBUG)std::cout << circuit << std::endl;
 
-        int i = 1;
+        int i = 1; // Iteration counter. For debugging only.
 
         while(frontier.size() > 0) {    
             auto begin = std::chrono::steady_clock::now();
@@ -497,18 +486,14 @@ std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
             end = std::chrono::steady_clock::now();
             addMeasurement("extract:processFrontier", begin, end);
             if(DEBUG)std::cout << "Iteration " << i << std::endl;           
-            //std::cout << "Current Circuit" << std::endl;
-            //std::cout << circuit << std::endl;
             i++;
-            //if(i == 6) exit(0);
         };
 
-        // Reverse circuit
+        
         if(DEBUG)std::cout << "Finished extraction. Reversing circuit and finding swaps..." << std::endl;
 
         inputs = diag.getInputs();
         outputs = diag.getOutputs();
-        //frontier = diag.getConnectedSet(outputs);
 
         if(DEBUG)std::cout << "Inputs:" << std::endl;
         if(DEBUG)printVector(inputs);
@@ -525,10 +510,11 @@ std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
         }
         if(DEBUG)std::cout << std::endl;
 
+        // Find swap gates
+        // TODO: Measure time
         std::map<int, int> swaps;
         bool leftover_swaps = false;
         
-
         for(int q = 0; q < outputs.size(); ++q) {
             
             auto incident = diag.incidentEdges(outputs[q]);
@@ -540,12 +526,9 @@ std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
                     // Check if edge to input is hadamard
                     if(edge.type == zx::EdgeType::Hadamard) {
                         circuit.h(q);
-                        //diag.removeEdge(v, w); 
                         diag.setEdgeType(outputs[q], edge.to, EdgeType::Simple);
-                        //edge.type = EdgeType::Simple;
                     }
-                    //size_t j = it - inputs.begin();
-                    auto qw = (zx::Qubit) (it - inputs.begin()); // FIXME: Not sure if this is correct
+                    auto qw = (zx::Qubit) (it - inputs.begin());
                     if( qw != q) {
                         if(DEBUG)std::cout << "Found swap at " << q << " , " << qw << std::endl;
                         leftover_swaps = true;
@@ -555,7 +538,6 @@ std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
                 }
             } 
         }
-        diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(frontier));
         if(leftover_swaps) {
             if(DEBUG)std::cout << "Creating swaps... " << std::endl;
             // Check for swaps
@@ -564,9 +546,14 @@ std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
             }
         }
         
-
+        // Reverse circuit
         circuit.reverse();
-        qc::CircuitOptimizer::cancelCNOTs(circuit); // TODO: Measure time
+
+        // Additional CNOT reduction.
+        auto begin = std::chrono::steady_clock::now();
+        qc::CircuitOptimizer::cancelCNOTs(circuit);
+        auto end = std::chrono::steady_clock::now();
+        addMeasurement("extract:cancelCNOTs", begin, end);
         return;
     }
 
@@ -612,133 +599,6 @@ std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
             linv[t1] = t2;
         }
         return swaps;
-    }
-
-     std::vector<std::pair<zx::Qubit, zx::Qubit>> gaussEliminationOther(zx::gf2Mat& matrix) {
-        int rows = matrix.size();
-        int cols = matrix[0].size();
-        int lead = 0;
-        if(DEBUG)std::cout << rows << " x " << cols << std::endl;
-        std::vector<std::pair<zx::Qubit, zx::Qubit>> rowOperations;
-        for (int r = 0; r < rows; r++) {
-            if (cols <= lead)
-                return rowOperations;
-            int i = r;
-            while (matrix[i][lead] == 0) {
-                i++;
-                if (i == rows) {
-                    i = r;
-                    lead++;
-                    if (cols == lead)
-                        return rowOperations;
-                }
-            }
-            /* if (i != r) {
-                for (int j = 0; j < cols; j++) {
-                    matrix[i][j] = matrix[i][j] ^ matrix[r][j];
-                    matrix[r][j] = matrix[r][j] ^ matrix[i][j];
-                    matrix[i][j] = matrix[i][j] ^ matrix[r][j];          
-                }
-                rowOperations.emplace_back(std::pair<zx::Qubit, zx::Qubit>{r, i});
-                rowOperations.emplace_back(std::pair<zx::Qubit, zx::Qubit>{i, r});
-                rowOperations.emplace_back(std::pair<zx::Qubit, zx::Qubit>{r, i});
-            } */
-            for (int j = 0; j < rows; j++) {
-                if (j != i) { // FIXME: Replaced r with i
-                    if (matrix[j][lead]) {
-                            for (int k = 0; k < cols; k++) { // IMPROVE: k = lead ?
-                                matrix[j][k] = matrix[j][k] ^ matrix[i][k]; // FIXME: Replaced r with i
-                            }
-                            // Check if the row accidentally got set to 0
-                            bool allZero = true;
-                            for (int k = 0; k < cols; k++) {
-                                if(matrix[j][k]) {
-                                    allZero = false;
-                                    break;
-                                }
-                            }
-                            // Undo row addition
-                            if(allZero) {
-                                for (int k = 0; k < cols; k++) { // IMPROVE: k = lead ?
-                                    matrix[j][k] = matrix[j][k] ^ matrix[i][k]; // FIXME: Replaced r with i
-                                }
-                            }
-                            else {
-                                rowOperations.emplace_back(std::pair<zx::Qubit, zx::Qubit>{i, j});
-                            }
-                        }
-                }
-            }
-            lead++;
-        }
-        return rowOperations;
-    }
-
-    // FIXME: Currently generates way more gates than it has to (because of echelon form)
-    std::vector<std::pair<zx::Qubit, zx::Qubit>> gaussElimination(zx::gf2Mat& matrix) {
-        int rows = matrix.size();
-        int cols = matrix[0].size();
-        if(DEBUG)std::cout << rows << " x " << cols << std::endl;
-        std::vector<std::pair<zx::Qubit, zx::Qubit>> rowOperations;
-        
-        // For every row
-        for(int i = 0; i < rows; ++i){
-            //std::cout << "Row: " << i << " ,Entry:" << matrix[i][i] << std::endl;
-            // Entry is 0: Pivoting
-            if(!matrix[i][i]) {
-
-                if(i >= rows) { // Special case: non-quadratic, then move further to the right to eliminate more entries
-                    if(DEBUG)std::cout << "Non-quadratic matrix, moving to the right!" << std::endl;
-                    for(int l = i; l < cols; ++l) { // For every column to the right
-                        if(matrix[i][l] != false) {
-                            for(int j = 0; j < rows; ++j){ // For every row
-                                if(j != i && matrix[j][l] != false) {
-                                    for(int k = 0; k < cols; ++k) { // For every column
-                                        matrix[j][k] = matrix[j][k] ^ matrix[i][k];
-                                    }
-                                    rowOperations.emplace_back(std::pair<zx::Qubit, zx::Qubit>{i, j}); // FIXME:
-                                }
-                            }
-                        }
-                    }
-                    break; // Breaks out of main loop; we reduced everything we could
-                }
-
-                //std::cout << "Current row is zero. Trying to find a non-zero row!" << std::endl;
-                for(int j = i+1; j < rows; ++j) { // For every row below the current
-                    if(matrix[j][i]) {
-                        // Add the other row onto this one
-                        for(int k = 0; k < cols; ++k) {
-                            //std::cout << "Adding rows " << i << " and " << j << std::endl;
-                            matrix[i][k] = matrix[j][k] ^ matrix[i][k];
-                        }
-                        rowOperations.emplace_back(std::pair<zx::Qubit, zx::Qubit>{j, i}); // FIXME:
-                        break;
-                    }
-                    else if(j == rows-1) {
-                        /* if(DEBUG)std::cout << "Giving up!" << std::endl;
-                        return rowOperations; */
-                        goto nextRow; // Not amazing, but faster than using functions
-                    }
-                }
-            }
-
-            // For every row
-            for(int j = 0; j < rows; ++j){
-                if(j != i && matrix[j][i]) { // Add the current row onto it if it has a non-zero entry
-                    // For every column
-                    for(int k = 0; k < cols; ++k) {
-                        matrix[j][k] = matrix[j][k] ^ matrix[i][k];
-                    }
-                    rowOperations.emplace_back(std::pair<zx::Qubit, zx::Qubit>{i, j}); // FIXME:
-                }
-            }
-            nextRow: ;
-
-        }
-        // TODO: Remove duplicates
-        // Do (2,1) and (1,2) remove each other?
-        return rowOperations;
     }
 
     void row_add(zx::gf2Mat& matrix, int r0, int r1, std::vector<std::pair<zx::Qubit, zx::Qubit>> &rowOperations) { // CHECK: Should rowOperations be a set, instead of a vector to avoid duplicates?
@@ -1088,21 +948,6 @@ int yzcounter = 0;
         auto end = std::chrono::steady_clock::now();
         addMeasurement("extract:extractCNOT:check", begin, end);
         if(DEBUG)std::cout << "Frontier CNOT extraction... " << std::endl;
-/*         if(DEBUG)std::cout << "Current Circuit" << std::endl;
-        if(DEBUG)std::cout << circuit << std::endl; */
-
-        // OLD: Check for remaining vertices
-        /* for(auto v : verts) {
-            if(diag.type(v.first) != zx::VertexType::Boundary && std::find(frontier.begin(), frontier.end(), v.first) == frontier.end()) {
-                vertsRemaining = true;
-                temp.emplace_back(v.first);
-            }
-        } 
-
-        if(!vertsRemaining) {
-            if(DEBUG)std::cout << "No verts remaining! " << std::endl;
-            return false;
-        }*/
 
         if(DEBUG)std::cout << "Frontier:" << std::endl;
         if(DEBUG)printVector(frontier);
@@ -1246,15 +1091,17 @@ int yzcounter = 0;
         }
         end = std::chrono::steady_clock::now();
 
-        // Removing duplicate row operations
+        // TODO: Removing duplicate row operations
         //filter_duplicate_cnots(rowOperations);
 
 
         addMeasurement("extract:extractCNOT:YZSpiders", begin, end);
         begin = std::chrono::steady_clock::now();
+
         // Extract CNOTs
-        for(auto r : rowOperations) { // BUG: Potentially there is a bug here?
+        for(auto r : rowOperations) {
             // From row operation: r.second = r.second + r.first
+
             auto it = frontier.begin();
             auto control_entry = std::next(it, r.second);
             auto target_entry = std::next(it, r.first);
@@ -1299,42 +1146,6 @@ int yzcounter = 0;
         end = std::chrono::steady_clock::now();
         addMeasurement("extract:extractCNOT:CNOTFromOperations", begin, end);
 
-        /* for(size_t i = 0; i < ws.size(); ++i) {
-            zx::Vertex v = ws_neighbours[i];
-            zx::Vertex w = ws[i];
-            circuit.h(diag.qubit(v)); 
-            circuit.phase(diag.qubit(v), diag.phase(w).getConst().toDouble()); 
-            frontier.erase(std::remove(frontier.begin(), frontier.end(), v), frontier.end());  // IMPROVE: Should really have been a map qubit->vert to begin with
-            frontier.emplace_back(w);
-            diag.removeVertex(v);
-        } */
-
-        /* std::vector<zx::Vertex> new_frontier;
-        auto inputs = diag.getInputs();
-
-        for(auto v : frontier) {
-            auto v_neighbours = diag.getConnectedSet(frontier);
-            if(v_neighbours.size() > 2 || std::find(inputs.begin(), inputs.end(), v) != inputs.end() ) {
-                continue;
-            }
-
-            while(true) {
-
-            }
-        }
- */
-        /* if(DEBUG)std::cout << "Frontier:" << std::endl;
-        if(DEBUG)printVector(frontier);
-
-        std::set<std::pair<Vertex, Vertex>> ws_edges = getEdgesBetweenVertices(diag, ws);
-        if(DEBUG)std::cout << "ws_edges:" << std::endl;
-        if(DEBUG)printVector(ws_edges);
-
-        for(std::pair<Vertex, Vertex> e : ws_edges) {
-            dd::Qubit qv = diag.qubit(e.second);
-            circuit.z(diag.qubit(e.first), dd::Control{qv});
-            diag.removeEdge(e.first, e.second);
-        } */
         return;
     }
 
@@ -1346,41 +1157,7 @@ int yzcounter = 0;
         qc::QuantumComputation qc{};
         std::cout << "Circuit " << filename << ":" << std::endl;
         qc.import("H:/Uni/Masterarbeit/qcec/" + filename);
-        /* qc.addQubitRegister(4U);
-        qc.z(0, 3_pc);
-        qc.z(1, 2_pc);
-        qc.h(3);
-        qc.phase(1, dd::PI_2);
-        qc.phase(0, dd::PI_2);
-        
-        qc.x(0); 
-        //qc.x(1);
-        qc.h(3); 
-        qc.x(3, 1_pc); 
-        qc.x(2, 3_pc); 
-        qc.x(3, 2_pc); 
-        qc.t(0);
-        qc.t(1);
-        qc.t(2);
-        qc.tdag(3);
-        qc.x(1, 0_pc);
-        qc.x(3, 2_pc);
-        qc.x(0, 3_pc);
-        qc.x(2, 1_pc);
-        qc.x(1, 0_pc);
-        qc.x(3, 2_pc);
-        qc.z(3, 2_pc);
-        //qc.z(2, 3_pc);
-        //qc.y(3, 2_pc);
-        qc.tdag(0);
-        qc.tdag(1);
-        qc.tdag(2);
-        qc.t(3);
-        qc.x(1, 0_pc);
-        qc.x(3, 2_pc);
-        qc.s(3);
-        qc.x(0, 3_pc);
-        qc.h(3); */
+
         qc.dump("H:/Uni/Masterarbeit/qcec/original.qasm");
 
         if(DEBUG)std::cout << "Circuit to extract:" << std::endl;
@@ -1391,9 +1168,7 @@ int yzcounter = 0;
         auto end = std::chrono::steady_clock::now();
         addMeasurement("buildFunctionality", begin, end);
 
-        //zx::fullReduce(zxDiag);
-        zxDiag.toGraphlike();
-        
+        zxDiag.toGraphlike();        
 
         std::cout << "Simplifying" << std::endl;
         begin = std::chrono::steady_clock::now();
