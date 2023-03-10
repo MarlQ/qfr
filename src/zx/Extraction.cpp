@@ -116,6 +116,8 @@ namespace zx {
     }
 
 
+    int thread_num = 0;
+
     bool contains(std::vector<size_t> vec, zx::Vertex val) {        // IMPROVE: isIn is already implemented in ZXDiagram
         return std::find(vec.begin(), vec.end(), val) != vec.end();
     }
@@ -425,6 +427,40 @@ std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
         }
 
         return frontier;
+    }
+
+    // Gets the start of the extraction
+    std::vector<size_t> getStart(const zx::ZXDiagram& diag) {
+        if(thread_num == 0) return diag.getOutputs();
+        else return diag.getInputs();
+    }
+
+    // Gets the end of the extraction
+    std::vector<size_t> getEnd(const zx::ZXDiagram& diag) {
+        if(thread_num == 0) return diag.getInputs();
+        else return diag.getOutputs();
+    }
+
+    // Returns true if v is in the start of the extraction
+    bool isStart(const zx::ZXDiagram& diag, const Vertex v) {
+        if(thread_num == 0) return diag.isOutput(v);
+        else return diag.isInput(v);
+    }
+
+    // Returns true if v is in the end of the extraction
+    bool isEnd(const zx::ZXDiagram& diag, const Vertex v) {
+        if(thread_num == 0) return diag.isInput(v);
+        else return diag.isOutput(v);
+    }
+
+/*     bool isConnectedToFrontier(const zx::ZXDiagram& diag, const Vertex v, const std::map<zx::Qubit, zx::Vertex> frontier2) {
+        for(auto vertex : frontier_neighbours) {
+
+        }
+    } */
+
+    void removeOverlappingFrontierVertices(const zx::ZXDiagram& diag) {
+        
     }
 
     void extract(qc::QuantumComputation& circuit, zx::ZXDiagram& diag) {
