@@ -420,47 +420,13 @@ std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
         std::map<zx::Qubit, zx::Vertex> frontier;
         auto outputs = diag.getOutputs();
         for(size_t i = 0; i < outputs.size(); ++i) {
-            auto v = diag.getNeighbourVertices(outputs[i])[0];
+            auto v = diag.getNeighborVertices(outputs[i])[0];
             if( !diag.isInput(v) ) {
                 frontier[i] = v;
             }
         }
 
         return frontier;
-    }
-
-    // Gets the start of the extraction
-    std::vector<size_t> getStart(const zx::ZXDiagram& diag) {
-        if(thread_num == 0) return diag.getOutputs();
-        else return diag.getInputs();
-    }
-
-    // Gets the end of the extraction
-    std::vector<size_t> getEnd(const zx::ZXDiagram& diag) {
-        if(thread_num == 0) return diag.getInputs();
-        else return diag.getOutputs();
-    }
-
-    // Returns true if v is in the start of the extraction
-    bool isStart(const zx::ZXDiagram& diag, const Vertex v) {
-        if(thread_num == 0) return diag.isOutput(v);
-        else return diag.isInput(v);
-    }
-
-    // Returns true if v is in the end of the extraction
-    bool isEnd(const zx::ZXDiagram& diag, const Vertex v) {
-        if(thread_num == 0) return diag.isInput(v);
-        else return diag.isOutput(v);
-    }
-
-/*     bool isConnectedToFrontier(const zx::ZXDiagram& diag, const Vertex v, const std::map<zx::Qubit, zx::Vertex> frontier2) {
-        for(auto vertex : frontier_neighbours) {
-
-        }
-    } */
-
-    void removeOverlappingFrontierVertices(const zx::ZXDiagram& diag) {
-        
     }
 
     void extract(qc::QuantumComputation& circuit, zx::ZXDiagram& diag) {
@@ -800,10 +766,10 @@ std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
 
         for(auto const& v : frontier) {
             if(DEBUG)std::cout << "Vertex: " << v.second << std::endl;
-            auto current_neighbours = diag.getNeighbourVertices(v.second);
+            auto current_neighbors = diag.getNeighborVertices(v.second);
             if(DEBUG)std::cout << "Neighb.:" << std::endl;
-            if(DEBUG)printVector(current_neighbours);
-            if(current_neighbours.size() > 2 || contains(inputs, v.second)) {
+            if(DEBUG)printVector(current_neighbors);
+            if(current_neighbors.size() > 2 || contains(inputs, v.second)) {
                 continue; // Process later
             }
             zx::Vertex output;
@@ -814,7 +780,7 @@ std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
             zx::Vertex current_vertex = v.second;
             std::vector<zx::Vertex> chain;
 
-            for(zx::Vertex n : current_neighbours) {
+            for(zx::Vertex n : current_neighbors) {
                 if(diag.isOutput(n)) {
                     previous_vertex = n;
                     output = n;
@@ -828,7 +794,7 @@ std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
                 //std::cout << "Current Vertex: " << current_vertex << std::endl;
                 //std::cout << "Previous Vertex: " << previous_vertex << std::endl;
                 
-                for(auto n : current_neighbours) {
+                for(auto n : current_neighbors) {
                     if(n != previous_vertex) {
                         next_vertex = n;
                     }
@@ -852,13 +818,13 @@ std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
                 if(!diag.phase(next_vertex).isZero()) { // IMPROVE: Should this really break?
                     break;
                 }
-                if(diag.getNeighbourVertices(next_vertex).size() > 2 || contains(inputs, next_vertex)) {
+                if(diag.getNeighborVertices(next_vertex).size() > 2 || contains(inputs, next_vertex)) {
                     break;
                 }
 
                 previous_vertex = current_vertex;
                 current_vertex = next_vertex;
-                current_neighbours = diag.getNeighbourVertices(current_vertex);
+                current_neighbors = diag.getNeighborVertices(current_vertex);
             }
 
             if(uneven_hadamard) {
@@ -917,8 +883,8 @@ std::unordered_map<int, int> column_optimal_swap(zx::gf2Mat& matrix ){
         auto outputs = diag.getOutputs();
 
         for(auto v : frontier) {
-            auto v_neighbours = diag.getNeighbourVertices(v.second);
-            for(auto w: v_neighbours) {
+            auto v_neighbors = diag.getNeighborVertices(v.second);
+            for(auto w: v_neighbors) {
                 if( !contains(outputs, w) && !contains(frontier_neighbors, w) ) {
                     frontier_neighbors.emplace_back(w);
                 }
@@ -973,10 +939,10 @@ int yzcounter = 0;
         // Check for remaining vertices
         auto begin = std::chrono::steady_clock::now();
         for(auto v : frontier) { // FIXME: Is this correct?
-            auto neighbours = diag.getNeighbourVertices(v.second);
-            if(DEBUG)std::cout << "Neighbours of " << v.first << " :" << std::endl;
-            if(DEBUG)printVector(neighbours);
-            if(neighbours.size() <= 2) {
+            auto neighbors = diag.getNeighborVertices(v.second);
+            if(DEBUG)std::cout << "Neighbors of " << v.first << " :" << std::endl;
+            if(DEBUG)printVector(neighbors);
+            if(neighbors.size() <= 2) {
                 if(DEBUG)std::cout << "No need for CNOT extraction. " << std::endl;
                 return;
             }
@@ -991,20 +957,20 @@ int yzcounter = 0;
         if(DEBUG)std::cout << "Verts remaining:" << std::endl;
         if(DEBUG)printVector(temp);
         begin = std::chrono::steady_clock::now();
-        // Get neighbours of frontier
-        //auto frontier_neighbours = diag.getConnectedSet(frontier, outputs);
-        auto frontier_neighbours = get_frontier_neighbors(diag, frontier);
+        // Get neighbors of frontier
+        //auto frontier_neighbors = diag.getConnectedSet(frontier, outputs);
+        auto frontier_neighbors = get_frontier_neighbors(diag, frontier);
 
-        if(DEBUG)std::cout << "Frontier neighbours:" << std::endl;
-        if(DEBUG)printVector(frontier_neighbours);
+        if(DEBUG)std::cout << "Frontier neighbors:" << std::endl;
+        if(DEBUG)printVector(frontier_neighbors);
 
-        // Get biadjacency matrix of frontier/neighbours
+        // Get biadjacency matrix of frontier/neighbors
         std::vector<zx::Vertex> frontier_values;
         for (const auto& [key, value] : frontier) {
             frontier_values.push_back(value);
         }
 
-        auto adjMatrix = getAdjacencyMatrix(diag, frontier_values, frontier_neighbours);
+        auto adjMatrix = getAdjacencyMatrix(diag, frontier_values, frontier_neighbors);
         end = std::chrono::steady_clock::now();
         addMeasurement("extract:extractCNOT:biadjacencyMatrix", begin, end);
 
@@ -1020,8 +986,8 @@ int yzcounter = 0;
                 perm_swapped[v] = k;
             }
             std::vector<size_t> neighbors2;
-            for(int i = 0; i < frontier_neighbours.size(); ++i) {
-                neighbors2.emplace_back(frontier_neighbours[perm_swapped[i]]);
+            for(int i = 0; i < frontier_neighbors.size(); ++i) {
+                neighbors2.emplace_back(frontier_neighbors[perm_swapped[i]]);
             }
             if(DEBUG)std::cout << "New neighbors:" << std::endl;
             if(DEBUG)printVector(neighbors2);
@@ -1042,7 +1008,7 @@ int yzcounter = 0;
         if(DEBUG)printVector(rowOperations);
 
         std::vector<zx::Vertex> ws;
-        //std::map<zx::Qubit, zx::Vertex>& ws_neighbours; // FIXME: What is this used for?
+        //std::map<zx::Qubit, zx::Vertex>& ws_neighbors; // FIXME: What is this used for?
         bool singleOneRowExists = false;
         for(size_t i = 0; i < adjMatrix.size(); ++i) {
             int sum = 0;//, nonZero = 0;
@@ -1056,7 +1022,7 @@ int yzcounter = 0;
                 singleOneRowExists = true;
                 break;
                 // Set w to vertex corresponding to nonZero
-                //int w = frontier_neighbours[nonZero];
+                //int w = frontier_neighbors[nonZero];
                 //ws.emplace_back(w); // FIXME: Check for duplicates (?)
             }
         }
@@ -1071,17 +1037,17 @@ int yzcounter = 0;
                 exit(0);
             }
             // Extract YZ-spiders
-            for(auto v : frontier_neighbours) {
-                auto v_neighbours = diag.getNeighbourVertices(v);
+            for(auto v : frontier_neighbors) {
+                auto v_neighbors = diag.getNeighborVertices(v);
 
-                //v_neighbours.erase(std::remove_if(v_neighbours.begin(), v_neighbours.end(), [diag](int x) { return diag.isInput(x); }), v_neighbours.end());
+                //v_neighbors.erase(std::remove_if(v_neighbors.begin(), v_neighbors.end(), [diag](int x) { return diag.isInput(x); }), v_neighbors.end());
 
-                for(auto w : v_neighbours) {
+                for(auto w : v_neighbors) {
                     if(diag.isInput(w) || diag.isOutput(w)) continue; // BUG: our output...
-                     auto w_neighbours = diag.getNeighbourVertices(w);
+                     auto w_neighbors = diag.getNeighborVertices(w);
 
-                     if(w_neighbours.size() == 1) { // BUG: Currently this can get input spiders...
-                        if(DEBUG)std::cout << "Vertex with only one neighbour found: " << w << " with phase " << diag.phase(w) << std::endl;
+                     if(w_neighbors.size() == 1) { // BUG: Currently this can get input spiders...
+                        if(DEBUG)std::cout << "Vertex with only one neighbor found: " << w << " with phase " << diag.phase(w) << std::endl;
                         if(diag.isOutput(w)) {
                             if(DEBUG)std::cout << "ERROR: vertex is input!" << std::endl;
                         }
@@ -1089,19 +1055,19 @@ int yzcounter = 0;
                         if(diag.phase(v).isZero()) { // Phase-gadget found 
                         //FIXME: Or PI?
 
-                            size_t frontier_neighbour;
+                            size_t frontier_neighbor;
                             zx::Qubit q;
 
-                            for(auto z : v_neighbours) {
+                            for(auto z : v_neighbors) {
                                 auto it = std::find_if(frontier.begin(), frontier.end(), [z](const auto& p) { return p.second == z; });
                                 if(it != frontier.end()) {
-                                    frontier_neighbour = z;
+                                    frontier_neighbor = z;
                                     q = it->first;
                                     break;
                                 }
                             }
-                            if(frontier_neighbour) {
-                                zx::pivot(diag, v, frontier_neighbour);
+                            if(frontier_neighbor) {
+                                zx::pivot(diag, v, frontier_neighbor);
 
                                 // Remove YZ-spider
                                 if(DEBUG)std::cout << "Old spider " << frontier[q] << std::endl;
@@ -1112,7 +1078,7 @@ int yzcounter = 0;
                                 frontier[q] = w;
 
                                 //frontier.erase(std::remove(frontier.begin(), frontier.end(), w), frontier.end());
-                                //frontier.erase(frontier_neighbour); // FIXME: Should be qubit!
+                                //frontier.erase(frontier_neighbor); // FIXME: Should be qubit!
 
                                 //if(DEBUG)std::cout << "Removing YZ-spider " << v << std::endl;
                                 if(DEBUG)std::cout << "New frontier spider is " << w << " on Qubit" << q << std::endl;
@@ -1153,7 +1119,7 @@ int yzcounter = 0;
             auto fcont = frontier.at(target_qubit);
 
             // Update diag based on row operation
-            for(auto v : diag.getNeighbourVertices(fcont)) {
+            for(auto v : diag.getNeighborVertices(fcont)) {
 
                 if( contains(outputs, v) ) {
                     continue;
@@ -1187,7 +1153,7 @@ int yzcounter = 0;
 
     
 
-    void testExtraction(std::string filename, std::string measurementGroup) {
+    void testExtractionOLD(std::string filename, std::string measurementGroup) {
 
         if(DEBUG)std::cout << "Setting up...\n";
         qc::QuantumComputation qc{};

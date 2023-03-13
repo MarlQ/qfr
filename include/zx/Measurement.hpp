@@ -1,6 +1,5 @@
 #pragma once
-
-#include "stdafx.h"
+#include <windows.h>
 #include <iostream>
 #include <algorithm>
 #include <cstddef>
@@ -15,7 +14,9 @@
 
 class Measurement {
 public:
+    Measurement(bool enabled=true);
     std::map<std::string, double> times;
+    bool enabled;
 
     void addMeasurement(std::string name, std::chrono::steady_clock::time_point begin, std::chrono::steady_clock::time_point end);
 

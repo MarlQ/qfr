@@ -1,9 +1,15 @@
+
+
+
+
 cmake_minimum_required(VERSION 3.14...3.24)
 
 project(qfr
         LANGUAGES CXX
         DESCRIPTION "MQT QFR  - A library for Quantum Functionality Representation"
         )
+
+include(thesis.cmake)
 
 # enable organization of targets into folders
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)

@@ -4,7 +4,7 @@
  */
 
 #include "QuantumComputation.hpp"
-#include "zx/Extraction.hpp"
+#include "zx/Extractor.hpp"
 
 #include <algorithm>
 #include <functional>
@@ -26,8 +26,9 @@ void show_usage(const std::string& name) {
 }
 
 int main(int argc, char** argv) {
-    std::cout << "Testing Extraction!";
-    zx::testExtraction();
+    std::cout << "Starting App" << std::endl;
+    if(argc > 2) zx::testExtraction(argv[1], argv[2]);
+    else zx::testExtraction();
     return 0;
 
 

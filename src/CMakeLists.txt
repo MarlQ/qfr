@@ -11,7 +11,8 @@ add_library(${PROJECT_NAME}
             ${CMAKE_CURRENT_SOURCE_DIR}/QuantumComputation.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/CircuitOptimizer.cpp
 
-            ${CMAKE_CURRENT_SOURCE_DIR}/zx/Extraction.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/zx/Extractor.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/zx/Measurement.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/zx/FunctionalityConstruction.cpp
 
             #${CMAKE_CURRENT_SOURCE_DIR}/../../../src/EquivalenceCheckingManager.cpp
@@ -50,7 +51,8 @@ add_library(${PROJECT_NAME}
             ${${PROJECT_NAME}_SOURCE_DIR}/include/dd/Simulation.hpp
             ${${PROJECT_NAME}_SOURCE_DIR}/include/dd/NoiseFunctionality.hpp
 
-            ${${PROJECT_NAME}_SOURCE_DIR}/include/zx/Extraction.hpp
+            ${${PROJECT_NAME}_SOURCE_DIR}/include/zx/Extractor.hpp
+            ${${PROJECT_NAME}_SOURCE_DIR}/include/zx/Measurement.hpp
             ${${PROJECT_NAME}_SOURCE_DIR}/include/zx/FunctionalityConstruction.hpp
 
             #${${PROJECT_NAME}_SOURCE_DIR}/../../include/EquivalenceCheckingManager.hpp

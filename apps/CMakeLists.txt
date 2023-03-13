@@ -4,6 +4,10 @@ add_executable(${PROJECT_NAME}_app ${CMAKE_CURRENT_SOURCE_DIR}/app.cpp)
 # link against main project library
 target_link_libraries(${PROJECT_NAME}_app PRIVATE ${PROJECT_NAME})
 
+# add OpenMP flags
+target_link_libraries(${PROJECT_NAME}_app PRIVATE "C:/Program Files/LLVM/lib/libomp.lib")
+target_compile_options(qfr PUBLIC ${OpenMP_CXX_FLAGS})
+
 # enable interprocedural optimization if it is supported
 enable_lto(${PROJECT_NAME}_app)
 
