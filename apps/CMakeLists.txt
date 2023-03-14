@@ -6,7 +6,9 @@ target_link_libraries(${PROJECT_NAME}_app PRIVATE ${PROJECT_NAME})
 
 # add OpenMP flags
 target_link_libraries(${PROJECT_NAME}_app PRIVATE "C:/Program Files/LLVM/lib/libomp.lib")
-target_compile_options(qfr PUBLIC ${OpenMP_CXX_FLAGS})
+#set(OpenMP_CXX_FLAGS "-fopenmp")
+#target_link_libraries(${PROJECT_NAME}_app PRIVATE ${OpenMP_CXX_FLAGS})
+#target_compile_options(${PROJECT_NAME}_app PUBLIC ${OpenMP_CXX_FLAGS})
 
 # enable interprocedural optimization if it is supported
 enable_lto(${PROJECT_NAME}_app)
