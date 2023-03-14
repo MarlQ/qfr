@@ -40,8 +40,8 @@ namespace zx {
             Extractor* other_extractor;
 
             void Extractor::extract() {
-                
-
+                std::cout << "Extractor " << omp_get_thread_num() << " started!" << std::endl;
+                return;
                 for(auto v : frontier) { // IMPROVE: Iterate over outputs
                     auto incident = diag.incidentEdges(v.second);
                     for(auto edge : incident) {
@@ -904,7 +904,7 @@ std::vector<std::pair<zx::Qubit, zx::Qubit>> Extractor::gaussElimination(zx::gf2
 
     void testExtraction(std::string circuitName, std::string measurementGroup) {
         std::cout << "Extraction testing" << std::endl;
-        bool parallelize = false;
+        bool parallelize = true;
         Measurement measurement;
 
         if(DEBUG)std::cout << "Setting up...\n";
@@ -939,11 +939,8 @@ std::vector<std::pair<zx::Qubit, zx::Qubit>> Extractor::gaussElimination(zx::gf2
 
         Extractor extractor1(qc_extracted, zxDiag);
 
-
         if(parallelize) {
-            extractor1.extract();
-        }
-        else {
+            std::cout << "Starting parallel extraction" << std::endl;
             zx::ZXDiagram zxDiag_reversed = zxDiag.adjoint();
             qc::QuantumComputation qc_extracted_2 = qc::QuantumComputation(zxDiag_reversed.getNQubits());
 
@@ -954,6 +951,7 @@ std::vector<std::pair<zx::Qubit, zx::Qubit>> Extractor::gaussElimination(zx::gf2
 
             #pragma omp parallel num_threads(2)
             {
+                std::cout << "Extractor " << omp_get_thread_num() << std::endl;
                 if(omp_get_thread_num() == 0) {
                     extractor1.extract();
                 }
@@ -962,6 +960,9 @@ std::vector<std::pair<zx::Qubit, zx::Qubit>> Extractor::gaussElimination(zx::gf2
                 }
             }
 
+        }
+        else {
+            extractor1.extract();
         }
 
         
