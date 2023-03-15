@@ -51,6 +51,8 @@ namespace zx {
 
         void processFrontier();
 
+        void removeParallelOverlap();
+
         std::vector<zx::Vertex> get_frontier_neighbors();
 
         gf2Mat getAdjacencyMatrix(const std::vector<zx::Vertex>& vertices_from, const std::vector<Vertex>& vertices_to);

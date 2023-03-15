@@ -41,7 +41,7 @@ namespace zx {
 
             void Extractor::extract() {
                 std::cout << "Extractor " << omp_get_thread_num() << " started!" << std::endl;
-                return;
+
                 for(auto v : frontier) { // IMPROVE: Iterate over outputs
                     auto incident = diag.incidentEdges(v.second);
                     for(auto edge : incident) {
@@ -72,6 +72,10 @@ namespace zx {
                     extractCNOT();
                     end = std::chrono::steady_clock::now();
                     measurement.addMeasurement("extract:extractCNOT", begin, end);
+
+                    if(parallelize) {
+                        removeParallelOverlap();
+                    }
                     
                     begin = std::chrono::steady_clock::now();
                     processFrontier();
@@ -137,7 +141,7 @@ namespace zx {
         }
         
         // Reverse circuit
-        circuit.reverse();
+        if (omp_get_thread_num() == 0) circuit.reverse();
 
         // Additional CNOT reduction.
         auto begin = std::chrono::steady_clock::now();
@@ -145,39 +149,6 @@ namespace zx {
         auto end = std::chrono::steady_clock::now();
         measurement.addMeasurement("extract:cancelCNOTs", begin, end);
         return;
-
-
-                // Check whether frontier vertices are adjacent between the two extractors
-                // Extractor 2 removes the overlapping adjcacent vertices from its scope
-                if(parallelize) {
-                    #pragma omp barrier
-
-                    #pragma omp critical
-                    {
-                        // Determine overlapping elements between the two Extractor objects
-                        std::vector<size_t> intersection;
-                        std::set_intersection(frontier_neighbors.begin(), frontier_neighbors.end(),
-                                            other_extractor->frontier_neighbors.begin(), other_extractor->frontier_neighbors.end(),
-                                            std::back_inserter(intersection));
-
-                        // Remove overlapping elements from one of the Extractor objects
-                        if (intersection.size() > 0) {
-                            // Remove overlapping elements from one of the Extractor objects
-                            if (omp_get_thread_num() == 0) {
-                                /* frontier_neighbors.erase(
-                                    std::remove_if(extractor1.frontier_neighbors.begin(), extractor1.frontier_neighbors.end(),
-                                                [&intersection](size_t i) { return std::find(intersection.begin(), intersection.end(), i) != intersection.end(); }),
-                                    extractor1.frontier_neighbors.end()); */
-                            }
-                        }
-                    }
-
-                    #pragma omp barrier
-                }
-                
-                // TODO: ...
-
-
             }
 
             std::map<zx::Qubit, zx::Vertex> Extractor::initFrontier() {
@@ -900,6 +871,38 @@ std::vector<std::pair<zx::Qubit, zx::Qubit>> Extractor::gaussElimination(zx::gf2
         }
         return swaps;
     }
+
+    void Extractor::removeParallelOverlap() {
+        return;
+        // TODO: Implement
+        // Check whether frontier vertices are adjacent between the two extractors
+                // Extractor 2 removes the overlapping adjcacent vertices from its scope
+                if(parallelize) {
+                    #pragma omp barrier
+
+                    #pragma omp critical
+                    {
+                        // Determine overlapping elements between the two Extractor objects
+                        std::vector<size_t> intersection;
+                        std::set_intersection(frontier_neighbors.begin(), frontier_neighbors.end(),
+                                            other_extractor->frontier_neighbors.begin(), other_extractor->frontier_neighbors.end(),
+                                            std::back_inserter(intersection));
+
+                        // Remove overlapping elements from one of the Extractor objects
+                        if (intersection.size() > 0) {
+                            // Remove overlapping elements from one of the Extractor objects
+                            if (omp_get_thread_num() == 0) {
+                                /* frontier_neighbors.erase(
+                                    std::remove_if(extractor1.frontier_neighbors.begin(), extractor1.frontier_neighbors.end(),
+                                                [&intersection](size_t i) { return std::find(intersection.begin(), intersection.end(), i) != intersection.end(); }),
+                                    extractor1.frontier_neighbors.end()); */
+                            }
+                        }
+                    }
+
+                    #pragma omp barrier
+                }
+    }
     
 
     void testExtraction(std::string circuitName, std::string measurementGroup) {
@@ -912,7 +915,7 @@ std::vector<std::pair<zx::Qubit, zx::Qubit>> Extractor::gaussElimination(zx::gf2
         std::cout << "Circuit " << circuitName << ":" << std::endl;
         qc.import("H:/Uni/Masterarbeit/qcec/" + circuitName);
 
-        qc.dump("H:/Uni/Masterarbeit/qcec/original.qasm");
+        qc.dump("H:/Uni/Masterarbeit/pyzx/thesis/original.qasm");
 
         if(DEBUG)std::cout << "Circuit to extract:" << std::endl;
         if(DEBUG)std::cout << qc << std::endl;
@@ -957,6 +960,8 @@ std::vector<std::pair<zx::Qubit, zx::Qubit>> Extractor::gaussElimination(zx::gf2
                 }
                 else {
                     extractor2.extract();
+                    std::cout << qc_extracted_2 << std::endl;
+                    qc_extracted_2.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted2.qasm");
                 }
             }
 
@@ -975,7 +980,7 @@ std::vector<std::pair<zx::Qubit, zx::Qubit>> Extractor::gaussElimination(zx::gf2
         measurement.addMeasurement("extract", begin, end);
 
         std::cout << "Finished Circuit" << std::endl;
-        std::cout << qc_extracted << std::endl;
+        //std::cout << qc_extracted << std::endl;
         //std::cout << "Circuit to extract:" << std::endl;
         //std::cout << qc << std::endl;
         qc_extracted.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted.qasm");
