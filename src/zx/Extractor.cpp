@@ -23,7 +23,7 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 #include <omp.h>
-#define DEBUG true
+#define DEBUG false
 
 namespace zx {
 
@@ -57,6 +57,12 @@ namespace zx {
         int i = 1; // Iteration counter. For debugging only.
 
         while (frontier.size() > 0) {
+            // Get neighbors of frontier
+            frontier_neighbors = get_frontier_neighbors();
+            if (parallelize) {
+                markParallelOverlap();
+            }
+
             auto begin = std::chrono::steady_clock::now();
             extractRZ_CZ();
             auto end = std::chrono::steady_clock::now();
@@ -67,15 +73,11 @@ namespace zx {
             end = std::chrono::steady_clock::now();
             measurement.addMeasurement("extract:extractCNOT", begin, end);
 
-            if (parallelize) {
-                removeParallelOverlap();
-            }
-
             begin = std::chrono::steady_clock::now();
             processFrontier();
             end = std::chrono::steady_clock::now();
             measurement.addMeasurement("extract:processFrontier", begin, end);
-            if (DEBUG) std::cout << "Iteration " << i << std::endl;
+            if(DEBUG) std::cout << "Iteration " << i << " thread " << omp_get_thread_num() << std::endl;
             i++;
         };
 
@@ -226,8 +228,7 @@ namespace zx {
         //if(DEBUG)printVector(temp);
         begin = std::chrono::steady_clock::now();
 
-        // Get neighbors of frontier
-        frontier_neighbors = get_frontier_neighbors();
+        
 
         if (DEBUG) std::cout << "Frontier neighbors:" << std::endl;
         //if(DEBUG)printVector(frontier_neighbors);
@@ -331,7 +332,7 @@ namespace zx {
                                     break;
                                 }
                             }
-                            if (frontier_neighbor) {
+                            if (frontier_neighbor) { // Add hadmard - green - hadamard to output ---> green becomes frontier afterwards, then manually resolve hadamard to output
                                 zx::pivot(diag, v, frontier_neighbor);
 
                                 // Remove YZ-spider
@@ -854,36 +855,38 @@ namespace zx {
         return swaps;
     }
 
-    void Extractor::removeParallelOverlap() {
-        return;
-        // TODO: Implement
+    void Extractor::markParallelOverlap() {
+        
+
         // Check whether frontier vertices are adjacent between the two extractors
         // Extractor 2 removes the overlapping adjcacent vertices from its scope
-        if (parallelize) {
-#pragma omp barrier
-
-#pragma omp critical
-            {
-                // Determine overlapping elements between the two Extractor objects
-                std::vector<size_t> intersection;
-                std::set_intersection(frontier_neighbors.begin(), frontier_neighbors.end(),
-                                      other_extractor->frontier_neighbors.begin(), other_extractor->frontier_neighbors.end(),
-                                      std::back_inserter(intersection));
-
-                // Remove overlapping elements from one of the Extractor objects
-                if (intersection.size() > 0) {
-                    // Remove overlapping elements from one of the Extractor objects
-                    if (omp_get_thread_num() == 0) {
-                        /* frontier_neighbors.erase(
-                                    std::remove_if(extractor1.frontier_neighbors.begin(), extractor1.frontier_neighbors.end(),
-                                                [&intersection](size_t i) { return std::find(intersection.begin(), intersection.end(), i) != intersection.end(); }),
-                                    extractor1.frontier_neighbors.end()); */
-                    }
-                }
+                    
+        #pragma omp critical(overlap)
+        {
+            std::cout << omp_get_thread_num() << " starting marking overlap" << std::endl;
+            // Mark vertices in frontier
+            for(auto [key, value] : frontier) {
+                marked_vertices->emplace(value, omp_get_thread_num());
+                std::cout << "Marked " << value << " , " << omp_get_thread_num() << std::endl;
             }
 
-#pragma omp barrier
+            // Mark neighbors of frontier
+            for(auto v : frontier_neighbors) {
+                
+
+                bool unmarked = marked_vertices->count(v) == 0;
+                if(unmarked) { // First come first served
+                    marked_vertices->emplace(v, omp_get_thread_num());
+                    std::cout << "|Marked " << v << " , " << omp_get_thread_num() << std::endl;
+                }
+                else {
+                    std::cout << "Already Marked " << v << " , " << marked_vertices->at(v) << std::endl;
+                }
+            }
+            
         }
+
+        
     }
 
     void testExtraction(std::string circuitName, std::string measurementGroup) {
@@ -921,26 +924,31 @@ namespace zx {
 
         qc::QuantumComputation qc_extracted = qc::QuantumComputation(zxDiag.getNQubits());
 
-        Extractor extractor1(qc_extracted, zxDiag);
+        Extractor extractor1(qc_extracted, zxDiag, NULL, parallelize);
 
         if (parallelize) {
             std::cout << "Starting parallel extraction" << std::endl;
-            zx::ZXDiagram          zxDiag_reversed = zxDiag.adjoint();
+            zx::ZXDiagram          zxDiag_reversed = zxDiag.reverse();
             qc::QuantumComputation qc_extracted_2  = qc::QuantumComputation(zxDiag_reversed.getNQubits());
+            std::map<size_t, int> marked_vertices;
 
-            Extractor extractor2(qc_extracted_2, zxDiag_reversed);
+            Extractor extractor2(qc_extracted_2, zxDiag_reversed, NULL, parallelize);
 
             extractor1.other_extractor = &extractor2;
             extractor2.other_extractor = &extractor1;
+            extractor1.marked_vertices = &marked_vertices;
+            extractor2.marked_vertices = &marked_vertices;
 
-#pragma omp parallel num_threads(2)
+            #pragma omp parallel num_threads(2) shared(marked_vertices)
             {
                 std::cout << "Extractor " << omp_get_thread_num() << std::endl;
                 if (omp_get_thread_num() == 0) {
                     extractor1.extract();
+                    std::cout << "Extractor 1 finished" << std::endl;
                 } else {
                     extractor2.extract();
-                    std::cout << qc_extracted_2 << std::endl;
+                    std::cout << "Extractor 2 finished" << std::endl;
+                    //std::cout << qc_extracted_2 << std::endl;
                     qc_extracted_2.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted2.qasm");
                 }
             }

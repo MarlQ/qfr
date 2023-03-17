@@ -29,6 +29,7 @@ namespace zx {
         Extractor(qc::QuantumComputation& circuit, ZXDiagram& diag, Measurement measurement = Measurement(true), bool parallelize = false);
 
         Extractor* other_extractor;
+        std::map<size_t, int>* marked_vertices; // Vertices marked by the thread in parallel execution
 
         void extract();
 
@@ -42,7 +43,7 @@ namespace zx {
 
         std::map<zx::Qubit, zx::Vertex> frontier;
         std::vector<size_t> frontier_neighbors;
-
+        
         std::map<zx::Qubit, zx::Vertex> initFrontier();
 
         void extractRZ_CZ();
@@ -51,7 +52,7 @@ namespace zx {
 
         void processFrontier();
 
-        void removeParallelOverlap();
+        void markParallelOverlap();
 
         std::vector<zx::Vertex> get_frontier_neighbors();
 
