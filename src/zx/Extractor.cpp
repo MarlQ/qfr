@@ -25,6 +25,14 @@
 #include <omp.h>
 #define DEBUG false
 
+/**
+ * TODO-List:
+ * - Measure time for swap gate construction (?)
+ * - Measure time for optimal_column_swap
+ * - Implement extractor avoiding unmarked vertices
+ * 
+ */
+
 namespace zx {
 
     Extractor::Extractor(qc::QuantumComputation& circuit, ZXDiagram& diag, Measurement measurement, bool parallelize):
@@ -208,7 +216,7 @@ namespace zx {
 
         // Check for remaining vertices
         auto begin = std::chrono::steady_clock::now();
-        for (auto v: frontier) { // FIXME: Is this correct?
+        for (auto v: frontier) {
             auto neighbors = diag.getNeighborVertices(v.second);
             if (DEBUG) std::cout << "neighbors of " << v.first << " :" << std::endl;
             //if(DEBUG)printVector(neighbors);
@@ -277,7 +285,6 @@ namespace zx {
         //if(DEBUG)printVector(rowOperations);
 
         std::vector<zx::Vertex> ws;
-        //std::map<zx::Qubit, zx::Vertex>& ws_neighbors; // FIXME: What is this used for?
         bool singleOneRowExists = false;
         for (size_t i = 0; i < adjMatrix.size(); ++i) {
             int sum = 0; //, nonZero = 0;
@@ -290,9 +297,6 @@ namespace zx {
             if (sum == 1) {
                 singleOneRowExists = true;
                 break;
-                // Set w to vertex corresponding to nonZero
-                //int w = frontier_neighbors[nonZero];
-                //ws.emplace_back(w); // FIXME: Check for duplicates (?)
             }
         }
         //std::cout << "Vector ws:" << std::endl;
@@ -343,9 +347,6 @@ namespace zx {
                                 }
                                 frontier[q] = w;
 
-                                //frontier.erase(std::remove(frontier.begin(), frontier.end(), w), frontier.end());
-                                //frontier.erase(frontier_neighbor); // FIXME: Should be qubit!
-
                                 //if(DEBUG)std::cout << "Removing YZ-spider " << v << std::endl;
                                 if (DEBUG) std::cout << "New frontier spider is " << w << " on Qubit" << q << std::endl;
                             }
@@ -357,7 +358,7 @@ namespace zx {
         }
         end = std::chrono::steady_clock::now();
 
-        // TODO: Removing duplicate row operations
+        // IMPROVE: Removing duplicate row operations
         //filter_duplicate_cnots(rowOperations);
 
         measurement.addMeasurement("extract:extractCNOT:YZSpiders", begin, end);
@@ -439,27 +440,18 @@ namespace zx {
                 if (diag.isOutput(n)) {
                     previous_vertex = n;
                     output          = n;
-                    //std::cout << "Output: " << output << std::endl;
                     break;
                 }
             }
 
             while (true) {
                 zx::Vertex next_vertex;
-                //std::cout << "Current Vertex: " << current_vertex << std::endl;
-                //std::cout << "Previous Vertex: " << previous_vertex << std::endl;
 
                 for (auto n: current_neighbors) {
                     if (n != previous_vertex) {
                         next_vertex = n;
                     }
                 }
-
-                /* if(next_vertex == -1) {
-                    if(DEBUG)std::cout << "ERROR: No next vertex!" << std::endl;
-                    break;
-                } */
-                //std::cout << "Next Vertex: " << next_vertex<< std::endl;
 
                 chain.emplace_back(next_vertex);
 
@@ -485,7 +477,6 @@ namespace zx {
             if (uneven_hadamard) {
                 circuit.h(v.first);
                 if (DEBUG) std::cout << "Adding Hadamard at " << v.first << std::endl;
-                //diag.setEdgeType(v.second, chain[0], zx::EdgeType::Simple); // CHECK: Is this a good way to do this?
             }
             if (DEBUG) std::cout << "Chain found:" << std::endl;
             //if(DEBUG)printVector(chain);
@@ -677,10 +668,10 @@ namespace zx {
                 }
             }
             if (!did_break) {                            // Didn't find any forced choices
-                if (conn.size() == claimedrows.size()) { // FIXME: Equivalent to if not (conn.keys() - claimedrows): ?
+                if (conn.size() == claimedrows.size()) { // Equivalent to if not (conn.keys() - claimedrows): ?
                     return target;                       // we are done
                 }
-                // XXX:
+                // XXX: --------------
                 std::unordered_set<int> conn_values;
                 for (auto [key, value]: conn) {
                     conn_values.insert(key);
@@ -691,6 +682,8 @@ namespace zx {
                     exit(0);
                     return target;
                 }
+                // ------------------
+
                 if (min_index == -1) {
                     std::cout << "This shouldn't happen ever" << std::endl;
                     exit(0);
@@ -708,7 +701,7 @@ namespace zx {
         }
     }
 
-    void Extractor::row_add(zx::gf2Mat& matrix, int r0, int r1, std::vector<std::pair<zx::Qubit, zx::Qubit>>& rowOperations) { // CHECK: Should rowOperations be a set, instead of a vector to avoid duplicates?
+    void Extractor::row_add(zx::gf2Mat& matrix, int r0, int r1, std::vector<std::pair<zx::Qubit, zx::Qubit>>& rowOperations) {
         int cols = matrix[0].size();
         for (int k = 0; k < cols; ++k) {
             matrix[r1][k] = matrix[r1][k] ^ matrix[r0][k];
