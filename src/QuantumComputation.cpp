@@ -988,6 +988,18 @@ namespace qc {
         }
     }
 
+    void QuantumComputation::combine(const qc::QuantumComputation& other) {
+        reserve(size() + other.size() );
+        for(auto it = other.begin(); it != other.end(); it++) {
+            auto op = it->get();
+            if(!op->isStandardOperation()) {
+                std::cout << "Error: not a standard operation" << std::endl;
+            }
+            emplace_back<StandardOperation>(op->getNqubits(), op->getControls(), op->getTargets(), op->getType(), op->getParameter().at(0), op->getParameter().at(1), op->getParameter().at(2), op->getStartingQubit() );
+        }
+        
+    }
+
     [[nodiscard]] std::pair<bool, std::optional<dd::Qubit>> QuantumComputation::containsLogicalQubit(const dd::Qubit logicalQubitIndex) const {
         if (const auto it = std::find_if(
                     initialLayout.cbegin(),
