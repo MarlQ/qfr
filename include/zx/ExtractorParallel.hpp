@@ -32,8 +32,9 @@ namespace zx {
         std::map<size_t, int>* claimed_vertices; // Vertices marked by the thread in parallel execution
         
         void extract();
-        void finalizeExtraction(std::vector<size_t> new_inputs);
+        void finalizeExtraction(std::map<zx::Qubit, zx::Vertex> other_frontier);
         std::vector<size_t> frontierToInputs();
+        std::map<zx::Qubit, zx::Vertex> frontier;
     private:
         qc::QuantumComputation& circuit;
         ZXDiagram& diag;
@@ -41,7 +42,7 @@ namespace zx {
         std::vector<size_t> inputs;
         std::vector<size_t> outputs;
         int thread_num;
-        std::map<zx::Qubit, zx::Vertex> frontier;
+        
         
         std::vector<size_t> frontier_neighbors;
         

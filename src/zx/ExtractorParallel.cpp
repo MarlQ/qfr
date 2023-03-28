@@ -41,6 +41,16 @@
 
 namespace zx {
 
+    std::vector<Vertex> mapToVector(std::map<zx::Qubit, zx::Vertex>& vertices) {
+        std::vector<Vertex> retVerts;
+
+        for( std::map<zx::Qubit, zx::Vertex>::iterator it = vertices.begin(); it != vertices.end(); ++it ) {
+            retVerts.push_back( it->second );
+         }
+        return retVerts;
+    }
+
+
     void printVector(std::vector<size_t> vec) {
         for(auto const& v : vec) {
             if(DEBUG)std::cout << v << " ,";
@@ -122,11 +132,38 @@ namespace zx {
 
     ExtractorParallel* other_extractor;
 
-    void ExtractorParallel::finalizeExtraction(std::vector<size_t> new_inputs) {
-        inputs = new_inputs;
+    void ExtractorParallel::finalizeExtraction(std::map<zx::Qubit, zx::Vertex> other_frontier) {
+        
+
+        // Remove all edges between the other extractor's frontier
+        // and vertices that were claimed by that extractor, 
+        // as those are edges that have already been handled.
+        for(auto [qubit, v] : other_frontier) {
+            auto neighbors = diag.getNeighborVertices(v);
+
+            for(auto w : neighbors) {
+                if(!isClaimedAnother(w)) continue;
+                
+                diag.removeEdge(v, w);
+            }
+
+            // Then add a connection to the appropriate input vertex
+            auto input_vert = inputs[qubit];
+            diag.addEdge(v, input_vert);     
+
+            // Remove phase
+            if (!diag.phase(v).isZero()) {
+                if (DEBUG) std::cout << "Removing phase at " << v << std::endl;
+                diag.setPhase(v, PiExpression());
+            }      
+
+        }
 
         if (DEBUG) std::cout << "Inputs:" << std::endl;
         if(DEBUG)printVector(inputs);
+
+        if (DEBUG) std::cout << "Outputs:" << std::endl;
+        if(DEBUG)printVector(outputs);
 
         int i = 0;
         while (frontier.size() > 0) {
@@ -213,7 +250,7 @@ namespace zx {
             for (auto edge: incident) {
                 zx::Vertex w = edge.to;
 
-                if (!diag.isOutput(w)) {
+                if (!contains(outputs, w)) {
                     continue;
                 }
 
@@ -233,7 +270,24 @@ namespace zx {
             extractRZ_CZ();
             auto end = std::chrono::steady_clock::now();
             measurement.addMeasurement("extract:extractRZ_CZ", begin, end);
-            return;
+
+
+
+/* 
+            auto verts = diag.getVertices();
+        std::vector<zx::Vertex> temp;
+
+        // Check for remaining vertices
+        for (auto v: frontier) {
+            auto neighbors = diag.getNeighborVertices(v.second); //FIXME: Not necessary?
+            if (DEBUG) std::cout << "neighbors of " << v.second << " :" << std::endl;
+            if(DEBUG)printVector(neighbors);
+        } */
+
+
+return;
+
+            
 
             begin = std::chrono::steady_clock::now();
             extractCNOT();
@@ -317,7 +371,7 @@ namespace zx {
         std::cout << "Initializing frontier" << std::endl;
         for (size_t i = 0; i < outputs.size(); ++i) {
             auto v = diag.getNeighborVertices(outputs[i])[0];
-            if (!diag.isInput(v) && claim(v)) {
+            if (!contains(inputs, v) && claim(v)) {
                 frontier[i] = v;
             }
         }
@@ -408,7 +462,7 @@ namespace zx {
         measurement.addMeasurement("extract:extractCNOT:biadjacencyMatrix", begin, end);
 
         if (DEBUG) std::cout << "Adjacency Matrix:" << std::endl;
-        //if(DEBUG)printMatrix(adjMatrix);
+        if(DEBUG)printMatrix(adjMatrix);
 
         bool perm_optimization = true;
         if (perm_optimization) { // TODO: Measure time
@@ -436,7 +490,7 @@ namespace zx {
         end = std::chrono::steady_clock::now();
         measurement.addMeasurement("extract:extractCNOT:gaussElimination", begin, end);
         if (DEBUG) std::cout << "After Gauss Elimination:" << std::endl;
-        //if(DEBUG)printMatrix(adjMatrix);
+        if(DEBUG)printMatrix(adjMatrix);
         if (DEBUG) std::cout << "Row Operations:" << std::endl;
         if(DEBUG)printVector(rowOperations);
 
@@ -461,6 +515,7 @@ namespace zx {
         begin = std::chrono::steady_clock::now();
         if (!singleOneRowExists) {
             if (DEBUG) std::cout << "Ws is 0" << std::endl;
+            diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test.json", inputs);
             exit(0);
 
             // Extract YZ-spiders
@@ -470,12 +525,12 @@ namespace zx {
                 //v_neighbors.erase(std::remove_if(v_neighbors.begin(), v_neighbors.end(), [diag](int x) { return diag.isInput(x); }), v_neighbors.end());
 
                 for (auto w: v_neighbors) {
-                    if (diag.isInput(w) || diag.isOutput(w)) continue;
+                    if (contains(inputs, w) || contains(outputs, w)) continue;
                     auto w_neighbors = diag.getNeighborVertices(w);
 
                     if (w_neighbors.size() == 1) {
                         if (DEBUG) std::cout << "Vertex with only one neighbor found: " << w << " with phase " << diag.phase(w) << std::endl;
-                        if (diag.isOutput(w)) {
+                        if (contains(outputs, w)) {
                             if (DEBUG) std::cout << "ERROR: vertex is input!" << std::endl;
                         }
 
@@ -549,8 +604,8 @@ namespace zx {
                     diag.removeEdge(ftarg, v);
                     if (DEBUG) std::cout << "Removed edge (" << ftarg << ", " << v << ")" << std::endl;
                 } else {
-                    if (diag.isInput(v)) { // v is an input
-                        if (DEBUG) std::cout << "ASDASD " << ftarg << " vs " << r.first << std::endl;
+                    if (contains(inputs, v)) { // v is an input
+                        if (DEBUG) std::cout << "Trying to remove edge but v is input " << ftarg << " vs " << v << std::endl;
                         auto new_v = diag.insertIdentity(fcont, target_qubit, v);
                         if (new_v) {
                             diag.addEdge(ftarg, *new_v, zx::EdgeType::Hadamard);
@@ -593,7 +648,7 @@ namespace zx {
             std::vector<zx::Vertex> chain;
 
             for (zx::Vertex n: current_neighbors) {
-                if (diag.isOutput(n)) {
+                if (contains(outputs, n)) {
                     previous_vertex = n;
                     output          = n;
                     break;
@@ -679,7 +734,6 @@ namespace zx {
 
     std::vector<zx::Vertex> ExtractorParallel::get_frontier_neighbors() {
         std::vector<Vertex> neighbors;
-        auto                outputs = diag.getOutputs();
 
         for (auto v: frontier) {
             auto v_neighbors = diag.getNeighborVertices(v.second);
@@ -698,7 +752,6 @@ namespace zx {
     // If a neighbor was marked already, it retroactively removes the froniter vertex, and all its neighbors
     std::vector<zx::Vertex> ExtractorParallel::get_frontier_neighbors_parallel() {
         std::vector<Vertex> neighbors;
-        auto                outputs = diag.getOutputs();
 
         for (auto it = frontier.cbegin(); it != frontier.cend();) {
             auto v_neighbors = diag.getNeighborVertices(it->second);
@@ -1119,7 +1172,9 @@ namespace zx {
     } */
 
     std::vector<size_t> ExtractorParallel::frontierToInputs() {
-        size_t qubits = inputs.size();
+        return inputs;
+        // TODO:
+        size_t qubits = outputs.size();
         std::vector<size_t> convertedInputs;
         for(size_t i = 0; i < qubits; ++i) {
             auto it = frontier.find(i);
@@ -1202,7 +1257,7 @@ namespace zx {
 
         // TODO: Extract rest
         std::cout << "Finalizing extraction" << std::endl;
-        extractor1.finalizeExtraction(extractor2.frontierToInputs());
+        extractor1.finalizeExtraction(extractor2.frontier);
         qc_extracted.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted2.qasm");
 
         // TODO: Combine diagrams

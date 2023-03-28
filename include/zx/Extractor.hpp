@@ -54,7 +54,13 @@ namespace zx {
 
         void markParallelOverlap();
 
+        bool isMarked(size_t vertex);
+        bool isMarkedAnother(size_t vertex);
+
+        std::vector<Vertex> Extractor::getMarkedNeighborVertices(const Vertex v);
+
         std::vector<zx::Vertex> get_frontier_neighbors();
+        std::vector<zx::Vertex> get_frontier_neighbors_parallel();
 
         gf2Mat getAdjacencyMatrix(const std::vector<zx::Vertex>& vertices_from, const std::vector<Vertex>& vertices_to);
 
