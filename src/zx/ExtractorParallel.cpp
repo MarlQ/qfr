@@ -285,21 +285,26 @@ namespace zx {
         } */
 
 
-return;
 
             
 
             begin = std::chrono::steady_clock::now();
-            extractCNOT();
+            //extractCNOT();
             end = std::chrono::steady_clock::now();
             measurement.addMeasurement("extract:extractCNOT", begin, end);
 
             begin = std::chrono::steady_clock::now();
-            processFrontier();
+            bool interrupted = !processFrontier();
             end = std::chrono::steady_clock::now();
             measurement.addMeasurement("extract:processFrontier", begin, end);
             if(DEBUG) std::cout << "Iteration " << i << " thread " << omp_get_thread_num() << std::endl;
             i++;
+            if(interrupted) {
+                if(DEBUG) std::cout << "Thread " << thread_num << " was interrupted!" << std::endl;
+                extractRZ_CZ();
+                return;
+            }
+            
         };
 
         if (DEBUG) std::cout << "Finished extraction. Reversing circuit and finding swaps..." << std::endl;
@@ -418,7 +423,7 @@ return;
         measurement.addMeasurement("extract:extractRZ_CZ:CZGates", begin, end);
     }
 
-    void ExtractorParallel::extractCNOT() {
+    bool ExtractorParallel::extractCNOT() {
         if (DEBUG) std::cout << "Is CNOT extraction necessary?" << std::endl;
         //bool vertsRemaining = false;
         auto verts = diag.getVertices();
@@ -433,7 +438,7 @@ return;
             if(DEBUG)printVector(neighbors);
             if (neighbors.size() <= 2) {
                 if (DEBUG) std::cout << "No need for CNOT extraction. " << std::endl;
-                return;
+                return true;
             }
         }
         auto end = std::chrono::steady_clock::now();
@@ -566,7 +571,7 @@ return;
                     }
                 }
             }
-            return;
+            return true;
         }
         end = std::chrono::steady_clock::now();
 
@@ -621,10 +626,10 @@ return;
         end = std::chrono::steady_clock::now();
         measurement.addMeasurement("extract:extractCNOT:CNOTFromOperations", begin, end);
 
-        return;
+        return true;
     }
 
-    void ExtractorParallel::processFrontier() {
+    bool ExtractorParallel::processFrontier() {
         if (DEBUG) std::cout << "Processing Frontier... " << std::endl;
         if (DEBUG) std::cout << "Frontier:" << std::endl;
         //if(DEBUG)printVector(frontier);
@@ -647,28 +652,48 @@ return;
             zx::Vertex              current_vertex = v.second;
             std::vector<zx::Vertex> chain;
 
+            bool claimed = false;
+
             for (zx::Vertex n: current_neighbors) {
                 if (contains(outputs, n)) {
                     previous_vertex = n;
                     output          = n;
                     break;
                 }
+                if(parallelize) {
+                    claimed = isClaimedAnother(n);
+                    if(claimed) break;
+                }
+                
+            }
+
+            if(parallelize && claim(previous_vertex)) {
+                if(DEBUG) std::cout << "Neighbor claimed already: Stopping!" << std::endl;
+                continue;
             }
 
             while (true) {
                 zx::Vertex next_vertex;
+                bool found_neighbor = false;
 
                 for (auto n: current_neighbors) {
-                    if (n != previous_vertex) {
+                    if(parallelize && isClaimedAnother(n)) continue;
+                    if (n != previous_vertex && (!parallelize || claim(n))) {
                         next_vertex = n;
+                        found_neighbor = true;
+                        break;
                     }
+                }
+                if(!found_neighbor) {
+                    if(DEBUG) std::cout << "No unclaimed neighbor: Stopping! " << next_vertex << std::endl;
+                    break;
                 }
 
                 chain.emplace_back(next_vertex);
 
                 auto edge = diag.getEdge(current_vertex, next_vertex);
 
-                if (!edge) return;
+                if (!edge) return false;
 
                 if (edge->type == EdgeType::Hadamard) {
                     uneven_hadamard = !uneven_hadamard;
@@ -727,9 +752,10 @@ return;
                     frontier[entry.first] = (zx::Vertex)entry.second;
                 }
             }
-        }
+        } else return false;
         if (DEBUG) std::cout << "New Frontier:" << std::endl;
         if(DEBUG)printVector(frontier);
+        return true;
     }
 
     std::vector<zx::Vertex> ExtractorParallel::get_frontier_neighbors() {
@@ -1141,7 +1167,7 @@ return;
     }
 
     // [CRITICAL] Checks whether a vertex has been claimed by another thread
-    bool ExtractorParallel::isClaimedAnother(size_t vertex) {
+    bool ExtractorParallel::isClaimedAnother(size_t vertex) {  
         #pragma omp critical(claim)
         {
             auto it = claimed_vertices->find(vertex);
@@ -1195,7 +1221,6 @@ return;
 
     void testParallelExtraction(std::string circuitName, std::string measurementGroup) {
         std::cout << "Parallel Extraction testing" << std::endl;
-        bool        parallelize = true;
         Measurement measurement;
 
         if (DEBUG) std::cout << "Setting up...\n";
@@ -1257,6 +1282,10 @@ return;
 
         // TODO: Extract rest
         std::cout << "Finalizing extraction" << std::endl;
+        std::cout << "--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------" << std::endl;
+        std::cout << "--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------" << std::endl;
+        std::cout << "--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------" << std::endl;
+        extractor1.parallelize = false;
         extractor1.finalizeExtraction(extractor2.frontier);
         qc_extracted.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted2.qasm");
 

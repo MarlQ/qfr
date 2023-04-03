@@ -35,6 +35,8 @@ namespace zx {
         void finalizeExtraction(std::map<zx::Qubit, zx::Vertex> other_frontier);
         std::vector<size_t> frontierToInputs();
         std::map<zx::Qubit, zx::Vertex> frontier;
+        bool parallelize = true;
+
     private:
         qc::QuantumComputation& circuit;
         ZXDiagram& diag;
@@ -50,9 +52,9 @@ namespace zx {
 
         void extractRZ_CZ();
 
-        void extractCNOT();
+        bool extractCNOT();
 
-        void processFrontier();
+        bool processFrontier();
 
         std::vector<zx::Vertex> get_frontier_neighbors();
         std::vector<zx::Vertex> get_frontier_neighbors_parallel();
