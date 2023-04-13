@@ -25,6 +25,7 @@
 #include <omp.h>
 #define DEBUG true
 
+
 /**
  * TODO-List:
  * - [x] Initialize both extractors
@@ -51,81 +52,9 @@ namespace zx {
     }
 
 
-    void printVector(std::vector<size_t> vec) {
-        for(auto const& v : vec) {
-            if(DEBUG)std::cout << v << " ,";
-        }
-        if(DEBUG)std::cout << std::endl;
-    }
+    
 
-    void printVector(std::vector<dd::Qubit> vec) {
-        for(auto const& v : vec) {
-            if(DEBUG)std::cout << v << " ,";
-        }
-        if(DEBUG)std::cout << std::endl;
-    }
-
-    void printVector(std::vector<int> vec) {
-        for(auto const& v : vec) {
-            if(DEBUG)std::cout << v << " ,";
-        }
-        if(DEBUG)std::cout << std::endl;
-    }
-
-    void printVector(std::map<int, int> vec) {
-        for(auto const& v : vec) {
-            if(DEBUG)std::cout << v.first << " : " << v.second << " ,";
-        }
-        if(DEBUG)std::cout << std::endl;
-    }
-    void printVector(std::map<zx::Qubit, zx::Vertex> vec) {
-        for(auto const& v : vec) {
-            if(DEBUG)std::cout << v.first << " : " << v.second << " ,";
-        }
-        if(DEBUG)std::cout << std::endl;
-    }
-    void printVector(std::map<zx::Vertex, zx::Vertex> vec) {
-        for(auto const& v : vec) {
-            if(DEBUG)std::cout << v.first << " : " << v.second << " ,";
-        }
-        if(DEBUG)std::cout << std::endl;
-    }
-    void printVector(std::map<zx::Vertex, int> vec) {
-        for(auto const& v : vec) {
-            if(DEBUG)std::cout << v.first << " : " << v.second << " ,";
-        }
-        if(DEBUG)std::cout << std::endl;
-    }
-
-    void printVector(std::vector<bool> vec) {
-        for(auto const& v : vec) {
-            if(DEBUG)std::cout << v << " ,";
-        }
-        if(DEBUG)std::cout << std::endl;
-    }
-
-    void printVector(std::vector<std::pair<int, int>> vec) {
-        for(auto const& v : vec) {
-            if(DEBUG)std::cout << "(" << v.first << "," << v.second << ") ,";
-        }
-        if(DEBUG)std::cout << std::endl;
-    }
-
-    void printVector(std::set<std::pair<zx::Vertex, zx::Vertex>> vec) {
-        for(auto const& v : vec) {
-            if(DEBUG)std::cout << "(" << v.first << "," << v.second << ") ,";
-        }
-        if(DEBUG)std::cout << std::endl;
-    }
-
-    void printMatrix(gf2Mat matrix) {
-        for(auto const& row : matrix) {
-            printVector(row);
-        }
-        if(DEBUG)std::cout << std::endl;
-    }
-
-    ExtractorParallel::ExtractorParallel(qc::QuantumComputation& circuit, ZXDiagram& diag, int thread_num, std::map<size_t, int>* claimed_vertices, Measurement measurement):
+    ExtractorParallel::ExtractorParallel(qc::QuantumComputation& circuit, ZXDiagram& diag, int thread_num, std::unordered_map<size_t, int>* claimed_vertices, Measurement measurement):
         circuit(circuit), diag(diag), thread_num(thread_num), claimed_vertices(claimed_vertices), measurement(measurement), inputs(diag.getInputs()), outputs(diag.getOutputs()) {
         claimOutputs();
     };
@@ -133,7 +62,7 @@ namespace zx {
     ExtractorParallel* other_extractor;
 
     void ExtractorParallel::finalizeExtraction(std::map<zx::Qubit, zx::Vertex> other_frontier) {
-        
+        parallelize = false;
 
         // Remove all edges between the other extractor's frontier
         // and vertices that were claimed by that extractor, 
@@ -143,26 +72,48 @@ namespace zx {
 
             for(auto w : neighbors) {
                 if(!isClaimedAnother(w)) continue;
-                
+                THREAD_SAFE_PRINT( "Removing edge " << v << " , " << w << std::endl);
                 diag.removeEdge(v, w);
             }
 
             // Then add a connection to the appropriate input vertex
             auto input_vert = inputs[qubit];
+            THREAD_SAFE_PRINT( "Adding edge " << v << " , " << input_vert << std::endl);
             diag.addEdge(v, input_vert);     
 
             // Remove phase
             if (!diag.phase(v).isZero()) {
-                if (DEBUG) std::cout << "Removing phase at " << v << std::endl;
+                THREAD_SAFE_PRINT( "Removing phase at " << v << std::endl);
                 diag.setPhase(v, PiExpression());
             }      
 
         }
 
-        if (DEBUG) std::cout << "Inputs:" << std::endl;
+
+        for (const auto& entry : deleted_edges) {
+            size_t v = entry.first;
+            const std::unordered_set<size_t>& deleted_neighbors = entry.second;
+
+            for (size_t w : deleted_neighbors) {
+                // Delete the edge between v and w
+                diag.removeEdge(v,w);
+            }
+        }
+
+        for (const auto& entry : added_edges) {
+            size_t v = entry.first;
+            const std::unordered_set<size_t>& added_neighbors = entry.second;
+
+            for (size_t w : added_neighbors) {
+                // Delete the edge between v and w
+                diag.addEdge(v,w,EdgeType::Hadamard);
+            }
+        }
+
+        THREAD_SAFE_PRINT( "Inputs:" << std::endl);
         if(DEBUG)printVector(inputs);
 
-        if (DEBUG) std::cout << "Outputs:" << std::endl;
+        THREAD_SAFE_PRINT( "Outputs:" << std::endl);
         if(DEBUG)printVector(outputs);
 
         int i = 0;
@@ -171,28 +122,28 @@ namespace zx {
             extractRZ_CZ();
             extractCNOT();
             processFrontier();
-            if(DEBUG) std::cout << "Iteration " << i << " thread " << omp_get_thread_num() << std::endl;
+            if(DEBUG) THREAD_SAFE_PRINT( "Iteration " << i << " thread " << omp_get_thread_num() << std::endl);
             i++;
         };
 
-        if (DEBUG) std::cout << "Finished extraction. Reversing circuit and finding swaps..." << std::endl;
+        THREAD_SAFE_PRINT( "Finished extraction. Reversing circuit and finding swaps..." << std::endl);
 
-        if (DEBUG) std::cout << "Inputs:" << std::endl;
+        THREAD_SAFE_PRINT( "Inputs:" << std::endl);
         if(DEBUG)printVector(inputs);
 
-        if (DEBUG) std::cout << "Frontier:" << std::endl;
+        THREAD_SAFE_PRINT( "Frontier:" << std::endl);
         if(DEBUG)printVector(frontier);
 
-        if (DEBUG) std::cout << "Outputs:" << std::endl;
+        THREAD_SAFE_PRINT( "Outputs:" << std::endl);
         if(DEBUG)printVector(outputs);
 
-        if (DEBUG) std::cout << "EDGES: " << std::endl;
+        THREAD_SAFE_PRINT( "EDGES: " << std::endl);
         if (DEBUG) {
             for (auto v: diag.getEdges()) {
                 std::cout << "(" << v.first << ", " << v.second << "), ";
             }
         }
-        if (DEBUG) std::cout << std::endl;
+        THREAD_SAFE_PRINT( std::endl);
 
         // Find swap gates
         // TODO: Measure time
@@ -213,7 +164,7 @@ namespace zx {
                     }
                     auto qw = (zx::Qubit)(it - inputs.begin());
                     if (((size_t)qw) != q) {
-                        if (DEBUG) std::cout << "Found swap at " << q << " , " << qw << std::endl;
+                        THREAD_SAFE_PRINT( "Found swap at " << q << " , " << qw << std::endl);
                         leftover_swaps = true;
                     }
                     swaps[q] = qw;
@@ -222,7 +173,7 @@ namespace zx {
             }
         }
         if (leftover_swaps) {
-            if (DEBUG) std::cout << "Creating swaps... " << std::endl;
+            THREAD_SAFE_PRINT( "Creating swaps... " << std::endl);
             // Check for swaps
             for (auto s: permutation_as_swaps(swaps)) {
                 circuit.swap(s.first, s.second);
@@ -241,7 +192,7 @@ namespace zx {
     }
 
     void ExtractorParallel::extract() {
-        std::cout << "Extractor " << omp_get_thread_num() << " started!" << std::endl;
+        THREAD_SAFE_PRINT( "Extractor " << omp_get_thread_num() << " started!" << std::endl);
         initFrontier();
         
 
@@ -255,7 +206,7 @@ namespace zx {
                 }
 
                 if (edge.type == zx::EdgeType::Hadamard) {
-                    if (DEBUG) std::cout << "Adding Hadamard at " << v.first << std::endl;
+                    THREAD_SAFE_PRINT( "Adding Hadamard at " << v.first << std::endl);
                     circuit.h(v.first);
                     diag.setEdgeType(v.second, w, zx::EdgeType::Simple);
                 }
@@ -265,12 +216,10 @@ namespace zx {
         int i = 1; // Iteration counter. For debugging only.
 
         while (frontier.size() > 0) {
-
             auto begin = std::chrono::steady_clock::now();
             extractRZ_CZ();
             auto end = std::chrono::steady_clock::now();
             measurement.addMeasurement("extract:extractRZ_CZ", begin, end);
-
 
 
 /* 
@@ -280,51 +229,51 @@ namespace zx {
         // Check for remaining vertices
         for (auto v: frontier) {
             auto neighbors = diag.getNeighborVertices(v.second); //FIXME: Not necessary?
-            if (DEBUG) std::cout << "neighbors of " << v.second << " :" << std::endl;
+            THREAD_SAFE_PRINT( "neighbors of " << v.second << " :" << std::endl);
             if(DEBUG)printVector(neighbors);
         } */
 
 
-
+            
             
 
             begin = std::chrono::steady_clock::now();
-            //extractCNOT();
+            bool interrupted_cnot = !extractCNOT();
             end = std::chrono::steady_clock::now();
             measurement.addMeasurement("extract:extractCNOT", begin, end);
 
             begin = std::chrono::steady_clock::now();
-            bool interrupted = !processFrontier();
+            bool interrupted_processing = !processFrontier();
             end = std::chrono::steady_clock::now();
             measurement.addMeasurement("extract:processFrontier", begin, end);
-            if(DEBUG) std::cout << "Iteration " << i << " thread " << omp_get_thread_num() << std::endl;
+            if(DEBUG) THREAD_SAFE_PRINT( "Iteration " << i << " thread " << omp_get_thread_num() << std::endl);
             i++;
-            if(interrupted) {
-                if(DEBUG) std::cout << "Thread " << thread_num << " was interrupted!" << std::endl;
+            if(/* interrupted_cnot ||  */interrupted_processing) {
                 extractRZ_CZ();
+                if(DEBUG) THREAD_SAFE_PRINT( "Thread " << thread_num << " was interrupted! ------------------------------------------------------------------------" << std::endl);
                 return;
             }
             
         };
 
-        if (DEBUG) std::cout << "Finished extraction. Reversing circuit and finding swaps..." << std::endl;
+        THREAD_SAFE_PRINT( "Finished extraction. Reversing circuit and finding swaps..." << std::endl);
 
-        if (DEBUG) std::cout << "Inputs:" << std::endl;
+        THREAD_SAFE_PRINT( "Inputs:" << std::endl);
         if(DEBUG)printVector(inputs);
 
-        if (DEBUG) std::cout << "Frontier:" << std::endl;
+        THREAD_SAFE_PRINT( "Frontier:" << std::endl);
         if(DEBUG)printVector(frontier);
 
-        if (DEBUG) std::cout << "Outputs:" << std::endl;
+        THREAD_SAFE_PRINT( "Outputs:" << std::endl);
         if(DEBUG)printVector(outputs);
 
-        if (DEBUG) std::cout << "EDGES: " << std::endl;
+        THREAD_SAFE_PRINT( "EDGES: " << std::endl);
         if (DEBUG) {
             for (auto v: diag.getEdges()) {
                 std::cout << "(" << v.first << ", " << v.second << "), ";
             }
         }
-        if (DEBUG) std::cout << std::endl;
+        THREAD_SAFE_PRINT( std::endl);
 
         // Find swap gates
         // TODO: Measure time
@@ -345,7 +294,7 @@ namespace zx {
                     }
                     auto qw = (zx::Qubit)(it - inputs.begin());
                     if (((size_t)qw) != q) {
-                        if (DEBUG) std::cout << "Found swap at " << q << " , " << qw << std::endl;
+                        THREAD_SAFE_PRINT( "Found swap at " << q << " , " << qw << std::endl);
                         leftover_swaps = true;
                     }
                     swaps[q] = qw;
@@ -354,7 +303,7 @@ namespace zx {
             }
         }
         if (leftover_swaps) {
-            if (DEBUG) std::cout << "Creating swaps... " << std::endl;
+            THREAD_SAFE_PRINT( "Creating swaps... " << std::endl);
             // Check for swaps
             for (auto s: permutation_as_swaps(swaps)) {
                 circuit.swap(s.first, s.second);
@@ -373,7 +322,7 @@ namespace zx {
     }
 
     void ExtractorParallel::initFrontier() {
-        std::cout << "Initializing frontier" << std::endl;
+        THREAD_SAFE_PRINT( "Initializing frontier" << std::endl);
         for (size_t i = 0; i < outputs.size(); ++i) {
             auto v = diag.getNeighborVertices(outputs[i])[0];
             if (!contains(inputs, v) && claim(v)) {
@@ -383,15 +332,15 @@ namespace zx {
     }
 
     void ExtractorParallel::extractRZ_CZ() {
-        if (DEBUG) std::cout << "Extracting RZ and CZ gates..." << std::endl;
+        THREAD_SAFE_PRINT( "Extracting RZ and CZ gates..." << std::endl);
 
         auto begin = std::chrono::steady_clock::now();
         // Extract RZ: Add phase-gate at v with phase p
         for (auto v: frontier) {
             if (!diag.phase(v.second).isZero()) {
-                if (DEBUG) std::cout << "Adding phase gate at " << v.first << " with phase " << diag.phase(v.second).getConst().toDouble() << std::endl;
+                THREAD_SAFE_PRINT( "Adding phase gate at " << v.first << " with phase " << diag.phase(v.second).getConst().toDouble() << std::endl);
                 if (!diag.phase(v.second).isConstant()) {
-                    if (DEBUG) std::cout << "Error: phase is not constant!" << std::endl;
+                    THREAD_SAFE_PRINT( "Error: phase is not constant!" << std::endl);
                     exit(0);
                 }
                 circuit.phase(v.first, diag.phase(v.second).getConst().toDouble());
@@ -410,7 +359,7 @@ namespace zx {
                 auto it = std::find_if(frontier.begin(), frontier.end(), [w](const auto& p) { return p.second == w; });
                 if (it != frontier.end()) {
                     dd::Qubit qw = it->first;
-                    if (DEBUG) std::cout << "Adding CZ gate at " << v.first << "/" << it->first << std::endl;
+                    THREAD_SAFE_PRINT( "Adding CZ gate at " << v.first << "/" << it->first << std::endl);
 
                     circuit.z(v.first, dd::Control{qw});
 
@@ -424,7 +373,7 @@ namespace zx {
     }
 
     bool ExtractorParallel::extractCNOT() {
-        if (DEBUG) std::cout << "Is CNOT extraction necessary?" << std::endl;
+        THREAD_SAFE_PRINT( "Is CNOT extraction necessary?" << std::endl);
         //bool vertsRemaining = false;
         auto verts = diag.getVertices();
 
@@ -434,44 +383,46 @@ namespace zx {
         auto begin = std::chrono::steady_clock::now();
         for (auto v: frontier) {
             auto neighbors = diag.getNeighborVertices(v.second); //FIXME: Not necessary?
-            if (DEBUG) std::cout << "neighbors of " << v.second << " :" << std::endl;
+            THREAD_SAFE_PRINT( "neighbors of " << v.second << " :" << std::endl);
             if(DEBUG)printVector(neighbors);
             if (neighbors.size() <= 2) {
-                if (DEBUG) std::cout << "No need for CNOT extraction. " << std::endl;
+                THREAD_SAFE_PRINT( "No need for CNOT extraction. " << std::endl);
                 return true;
             }
         }
         auto end = std::chrono::steady_clock::now();
         measurement.addMeasurement("extract:extractCNOT:check", begin, end);
-        if (DEBUG) std::cout << "Frontier CNOT extraction... " << std::endl;
+        THREAD_SAFE_PRINT( "Frontier CNOT extraction... " << std::endl);
 
-        if (DEBUG) std::cout << "Frontier:" << std::endl;
+        THREAD_SAFE_PRINT( "Frontier:" << std::endl);
         if(DEBUG)printVector(frontier);
 
-        if (DEBUG) std::cout << "Verts remaining:" << std::endl;
+        THREAD_SAFE_PRINT( "Verts remaining:" << std::endl);
         if(DEBUG)printVector(temp);
         begin = std::chrono::steady_clock::now();
-        frontier_neighbors = get_frontier_neighbors();
-
-        if (DEBUG) std::cout << "Frontier neighbors:" << std::endl;
-        if(DEBUG)printVector(frontier_neighbors);
-
-        // Get biadjacency matrix of frontier/neighbors
         std::vector<zx::Vertex> frontier_values;
         for (const auto& [key, value]: frontier) {
             frontier_values.push_back(value);
         }
+
+        frontier_neighbors = parallelize ? get_frontier_neighbors_parallel(&frontier_values) : get_frontier_neighbors();
+
+        THREAD_SAFE_PRINT( "Frontier neighbors:" << std::endl);
+        if(DEBUG)printVector(frontier_neighbors);
+
+        // Get biadjacency matrix of frontier/neighbors
+    
         // TODO: Omit frontier vertices that are neighbors to marked vertices
         auto adjMatrix = getAdjacencyMatrix(frontier_values, frontier_neighbors);
         end            = std::chrono::steady_clock::now();
         measurement.addMeasurement("extract:extractCNOT:biadjacencyMatrix", begin, end);
 
-        if (DEBUG) std::cout << "Adjacency Matrix:" << std::endl;
+        THREAD_SAFE_PRINT( "Adjacency Matrix:" << std::endl);
         if(DEBUG)printMatrix(adjMatrix);
 
         bool perm_optimization = true;
         if (perm_optimization) { // TODO: Measure time
-            if (DEBUG) std::cout << "Finding optimal column swaps" << std::endl;
+            THREAD_SAFE_PRINT( "Finding optimal column swaps" << std::endl);
             std::unordered_map<int, int> perm = column_optimal_swap(adjMatrix);
             std::unordered_map<int, int> perm_swapped;
             for (const auto& [k, v]: perm) {
@@ -481,10 +432,10 @@ namespace zx {
             for (size_t i = 0; i < frontier_neighbors.size(); ++i) {
                 neighbors2.emplace_back(frontier_neighbors[perm_swapped[i]]);
             }
-            if (DEBUG) std::cout << "New neighbors:" << std::endl;
+            THREAD_SAFE_PRINT( "New neighbors:" << std::endl);
             if(DEBUG)printVector(neighbors2);
             adjMatrix = getAdjacencyMatrix(frontier_values, neighbors2);
-            if (DEBUG) std::cout << "New Adjacency Matrix:" << std::endl;
+            THREAD_SAFE_PRINT( "New Adjacency Matrix:" << std::endl);
             //if(DEBUG)printMatrix(adjMatrix);
         }
 
@@ -494,9 +445,9 @@ namespace zx {
 
         end = std::chrono::steady_clock::now();
         measurement.addMeasurement("extract:extractCNOT:gaussElimination", begin, end);
-        if (DEBUG) std::cout << "After Gauss Elimination:" << std::endl;
+        THREAD_SAFE_PRINT( "After Gauss Elimination:" << std::endl);
         if(DEBUG)printMatrix(adjMatrix);
-        if (DEBUG) std::cout << "Row Operations:" << std::endl;
+        THREAD_SAFE_PRINT( "Row Operations:" << std::endl);
         if(DEBUG)printVector(rowOperations);
 
         std::vector<zx::Vertex> ws;
@@ -514,12 +465,14 @@ namespace zx {
                 break;
             }
         }
-        //std::cout << "Vector ws:" << std::endl;
+        //std::cout << "Vector ws:" << std::endl);
         if(DEBUG)printVector(ws);
 
         begin = std::chrono::steady_clock::now();
         if (!singleOneRowExists) {
-            if (DEBUG) std::cout << "Ws is 0" << std::endl;
+            THREAD_SAFE_PRINT( "Ws is 0" << std::endl);
+            if(!parallelize) exit(0);
+            return false;
             diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test.json", inputs);
             exit(0);
 
@@ -534,9 +487,9 @@ namespace zx {
                     auto w_neighbors = diag.getNeighborVertices(w);
 
                     if (w_neighbors.size() == 1) {
-                        if (DEBUG) std::cout << "Vertex with only one neighbor found: " << w << " with phase " << diag.phase(w) << std::endl;
+                        THREAD_SAFE_PRINT( "Vertex with only one neighbor found: " << w << " with phase " << diag.phase(w) << std::endl);
                         if (contains(outputs, w)) {
-                            if (DEBUG) std::cout << "ERROR: vertex is input!" << std::endl;
+                            THREAD_SAFE_PRINT( "ERROR: vertex is input!" << std::endl);
                         }
 
                         if (diag.phase(v).isZero()) { // Phase-gadget found
@@ -557,15 +510,15 @@ namespace zx {
                                 zx::pivot(diag, v, frontier_neighbor);
 
                                 // Remove YZ-spider
-                                if (DEBUG) std::cout << "Old spider " << frontier[q] << std::endl;
+                                THREAD_SAFE_PRINT( "Old spider " << frontier[q] << std::endl);
                                 if (frontier[q] != v) {
-                                    if (DEBUG) std::cout << "Old spider " << frontier[q] << " != " << v << std::endl;
+                                    THREAD_SAFE_PRINT( "Old spider " << frontier[q] << " != " << v << std::endl);
                                     //exit(0);
                                 }
                                 frontier[q] = w;
 
-                                //if(DEBUG)std::cout << "Removing YZ-spider " << v << std::endl;
-                                if (DEBUG) std::cout << "New frontier spider is " << w << " on Qubit" << q << std::endl;
+                                //THREAD_SAFE_PRINT( "Removing YZ-spider " << v << std::endl);
+                                THREAD_SAFE_PRINT( "New frontier spider is " << w << " on Qubit" << q << std::endl);
                             }
                         }
                     }
@@ -591,10 +544,10 @@ namespace zx {
 
             auto control_qubit = control_entry->first;
             auto target_qubit  = target_entry->first;
-            if (DEBUG) std::cout << " Entries " << control_qubit << "|" << control_entry->second << " , " << target_qubit << "|" << target_entry->second << std::endl;
+            THREAD_SAFE_PRINT( " Entries " << control_qubit << "|" << control_entry->second << " , " << target_qubit << "|" << target_entry->second << std::endl);
 
             circuit.x(target_qubit, dd::Control{(dd::Qubit)control_qubit});
-            if (DEBUG) std::cout << "Added CNOT (T:" << target_qubit << ", C:" << control_qubit << ")" << std::endl;
+            THREAD_SAFE_PRINT( "Added CNOT (T:" << target_qubit << ", C:" << control_qubit << ")" << std::endl);
 
             auto ftarg = frontier.at(control_qubit);
             auto fcont = frontier.at(target_qubit);
@@ -607,18 +560,20 @@ namespace zx {
 
                 if (diag.connected(ftarg, v)) {
                     diag.removeEdge(ftarg, v);
-                    if (DEBUG) std::cout << "Removed edge (" << ftarg << ", " << v << ")" << std::endl;
+                    if(parallelize && thread_num != 0) deleted_edges[v].insert(ftarg);
+                    THREAD_SAFE_PRINT( "Removed edge (" << ftarg << ", " << v << ")" << std::endl);
                 } else {
                     if (contains(inputs, v)) { // v is an input
-                        if (DEBUG) std::cout << "Trying to remove edge but v is input " << ftarg << " vs " << v << std::endl;
+                        THREAD_SAFE_PRINT( "Trying to remove edge but v is input " << ftarg << " vs " << v << std::endl);
                         auto new_v = diag.insertIdentity(fcont, target_qubit, v);
                         if (new_v) {
                             diag.addEdge(ftarg, *new_v, zx::EdgeType::Hadamard);
-                            if (DEBUG) std::cout << "Added edge (" << ftarg << ", " << *new_v << ")" << std::endl;
+                            THREAD_SAFE_PRINT( "Added edge (" << ftarg << ", " << *new_v << ")" << std::endl);
                         }
                     } else {
                         diag.addEdge(ftarg, v, zx::EdgeType::Hadamard);
-                        if (DEBUG) std::cout << "Added edge (" << ftarg << ", " << v << ")" << std::endl;
+                        if(parallelize && thread_num != 0) added_edges[v].insert(ftarg);
+                        THREAD_SAFE_PRINT( "Added edge (" << ftarg << ", " << v << ")" << std::endl);
                     }
                 }
             }
@@ -630,17 +585,17 @@ namespace zx {
     }
 
     bool ExtractorParallel::processFrontier() {
-        if (DEBUG) std::cout << "Processing Frontier... " << std::endl;
-        if (DEBUG) std::cout << "Frontier:" << std::endl;
+        THREAD_SAFE_PRINT( "Processing Frontier... " << std::endl);
+        THREAD_SAFE_PRINT( "Frontier:" << std::endl);
         //if(DEBUG)printVector(frontier);
 
         std::map<zx::Qubit, int> new_frontier;
 
         for (auto const& v: frontier) {
-            if (DEBUG) std::cout << "Vertex: " << v.second << std::endl;
+            THREAD_SAFE_PRINT( "Vertex: " << v.second << std::endl);
             auto current_neighbors = diag.getNeighborVertices(v.second);
-            if (DEBUG) std::cout << "Neighb.:" << std::endl;
-            //if(DEBUG)printVector(current_neighbors);
+            THREAD_SAFE_PRINT( "Neighb.:" << std::endl);
+            if(DEBUG)printVector(current_neighbors);
             if (current_neighbors.size() > 2 || contains(inputs, v.second)) {
                 continue; // Process later
             }
@@ -660,16 +615,6 @@ namespace zx {
                     output          = n;
                     break;
                 }
-                if(parallelize) {
-                    claimed = isClaimedAnother(n);
-                    if(claimed) break;
-                }
-                
-            }
-
-            if(parallelize && claim(previous_vertex)) {
-                if(DEBUG) std::cout << "Neighbor claimed already: Stopping!" << std::endl;
-                continue;
             }
 
             while (true) {
@@ -677,15 +622,17 @@ namespace zx {
                 bool found_neighbor = false;
 
                 for (auto n: current_neighbors) {
-                    if(parallelize && isClaimedAnother(n)) continue;
-                    if (n != previous_vertex && (!parallelize || claim(n))) {
+                    if (n != previous_vertex) {
+                        if(parallelize) {
+                            if(!claim(n)) continue;
+                        }
                         next_vertex = n;
                         found_neighbor = true;
                         break;
                     }
                 }
                 if(!found_neighbor) {
-                    if(DEBUG) std::cout << "No unclaimed neighbor: Stopping! " << next_vertex << std::endl;
+                    THREAD_SAFE_PRINT( "No unclaimed neighbor: Stopping! " << std::endl);
                     break;
                 }
 
@@ -708,42 +655,57 @@ namespace zx {
                 previous_vertex   = current_vertex;
                 current_vertex    = next_vertex;
                 current_neighbors = diag.getNeighborVertices(current_vertex);
+            } // END: while
+
+            if(chain.size() <= 0) {
+                THREAD_SAFE_PRINT( "No chain found." << std::endl);
+                continue;
             }
 
             if (uneven_hadamard) {
                 circuit.h(v.first);
-                if (DEBUG) std::cout << "Adding Hadamard at " << v.first << std::endl;
+                THREAD_SAFE_PRINT( "Adding Hadamard at " << v.first << std::endl);
             }
-            if (DEBUG) std::cout << "Chain found:" << std::endl;
-            //if(DEBUG)printVector(chain);
+            THREAD_SAFE_PRINT( "Chain found:" << std::endl);
+            if(DEBUG)printVector(chain);
 
             for (unsigned int i = 0; i < chain.size() - 1; i++) {
-                if (DEBUG) std::cout << "Removing Vertex: " << chain[i] << std::endl;
+                THREAD_SAFE_PRINT( "Removing Vertex: " << chain[i] << std::endl);
                 diag.removeVertex(chain[i]);
+                if(parallelize && thread_num != 0) { // Vertex will be behind the frontier. We no longer need to store edge information about it.
+                    deleted_edges[chain[i]].clear();
+                    added_edges[chain[i]].clear();
+                }
             }
 
             auto edgeType      = diag.getEdge(v.second, output)->type; //CHECK: isn't this always Simple, as we removed hadamards at the start?
             auto last_in_chain = chain[chain.size() - 1];
             //auto v_qubit = v.first;
-            if (DEBUG) std::cout << "Edge type is " << ((edgeType == EdgeType::Simple) ? "S" : "H") << std::endl;
-            if (DEBUG) std::cout << "Removing Vertex: " << v.second << std::endl;
+            THREAD_SAFE_PRINT( "Edge type is " << ((edgeType == EdgeType::Simple) ? "S" : "H") << std::endl);
+            THREAD_SAFE_PRINT( "Removing Vertex: " << v.second << std::endl);
             diag.removeVertex(v.second);
-            if (DEBUG) std::cout << "Adding Edge: (" << last_in_chain << "," << output << ")" << std::endl;
+            THREAD_SAFE_PRINT( "Adding Edge: (" << last_in_chain << "," << output << ")" << std::endl);
             diag.addEdge(last_in_chain, output, edgeType);
+
+
+            if(parallelize && thread_num != 0) { // Vertex will be in the frontier. We no longer need to store edge information about it.
+                deleted_edges[last_in_chain].clear();
+                added_edges[last_in_chain].clear();
+            }
 
             if (!contains(inputs, last_in_chain)) {
                 new_frontier[v.first] = (int)last_in_chain;
             } else {
                 new_frontier[v.first] = -1;
             }
-            //std::cout << "Frontier Changes:" << std::endl;
+            //std::cout << "Frontier Changes:" << std::endl);
             //if(DEBUG)printVector(new_frontier);
         }
-        if (DEBUG) std::cout << "Old Frontier:" << std::endl;
+        THREAD_SAFE_PRINT( "Old Frontier:" << std::endl);
         if(DEBUG)printVector(frontier);
 
         if (new_frontier.size() > 0) {
-            if (DEBUG) std::cout << "Frontier Changes:" << std::endl;
+            THREAD_SAFE_PRINT( "Frontier Changes:" << std::endl);
             if(DEBUG)printVector(new_frontier);
             for (auto entry: new_frontier) {
                 //frontier.erase(std::remove(frontier.begin(), frontier.end(), entry.first), frontier.end());
@@ -753,7 +715,7 @@ namespace zx {
                 }
             }
         } else return false;
-        if (DEBUG) std::cout << "New Frontier:" << std::endl;
+        THREAD_SAFE_PRINT( "New Frontier:" << std::endl);
         if(DEBUG)printVector(frontier);
         return true;
     }
@@ -776,51 +738,52 @@ namespace zx {
 
     // In contrast to the normal get_frontier_neighbors, this function only adds unmarked neighbors.
     // If a neighbor was marked already, it retroactively removes the froniter vertex, and all its neighbors
-    std::vector<zx::Vertex> ExtractorParallel::get_frontier_neighbors_parallel() {
+    std::vector<zx::Vertex> ExtractorParallel::get_frontier_neighbors_parallel(std::vector<zx::Vertex>* frontier_values) {
         std::vector<Vertex> neighbors;
+        #pragma omp critical(claim)
+        {
+            for (auto it = frontier_values->cbegin(); it != frontier_values->cend();) {
+                auto v_neighbors = diag.getNeighborVertices(*it);
+                std::vector<Vertex> neighbors_current;
+                bool marked_found = false;
 
-        for (auto it = frontier.cbegin(); it != frontier.cend();) {
-            auto v_neighbors = diag.getNeighborVertices(it->second);
-            std::vector<Vertex> neighbors_current;
-            bool marked_found = false;
+                for (auto w: v_neighbors) {
+                    if (!contains(outputs, w) && !contains(neighbors, w) && ! contains(frontier, w)) {
 
-            for (auto w: v_neighbors) {
-                if (!contains(outputs, w) && !contains(neighbors, w) && ! contains(frontier, w)) {
-
-                    // Check whether neighbor is unmarked
-                    bool marked = claimed_vertices->count(w) != 0;
-                    if(marked) { // Marked found: stop
-                      marked_found = true;   
-                      break;
+                        // Check whether neighbor is unmarked
+                        bool marked = claimed_vertices->count(w) != 0;
+                        if(marked) { // Marked found: stop
+                        marked_found = true;   
+                        break;
+                        }
+                        
+                        neighbors_current.emplace_back(w);
                     }
-                    
-                    neighbors_current.emplace_back(w);
                 }
-            }
 
-            if(marked_found) {
-              // Found a single marked vertex: Remove frontier vertex
-              std::cout << "Found marked neighbor, removing " << it->second << " , " << omp_get_thread_num() << std::endl;
-              frontier.erase(it++);
-            }
-            else {
-              // All unmarked: add to frontier neighbors and mark all
-              for(auto w: neighbors_current) {
-                std::cout << "FN Marked " << w << " , " << omp_get_thread_num() << std::endl;
-                neighbors.emplace_back(w);
-                claimed_vertices->emplace(w, omp_get_thread_num());
-              }
-              
-              ++it;
-            }
+                if(marked_found) {
+                    // Found a single marked vertex: Remove frontier vertex
+                    THREAD_SAFE_PRINT( "Found marked neighbor, removing " << *it << " , " << omp_get_thread_num() << std::endl);
+                    it = frontier_values->erase(it);
+                }
+                else {
+                // All unmarked: add to frontier neighbors and mark all
+                for(auto w: neighbors_current) {
+                    THREAD_SAFE_PRINT( "FN Marked " << w << " , " << omp_get_thread_num() << std::endl);
+                    neighbors.emplace_back(w);
+                    claimed_vertices->emplace(w, omp_get_thread_num());
+                }
+                
+                ++it;
+                }
 
+            }
         }
-
         return neighbors;
     }
 
     gf2Mat ExtractorParallel::getAdjacencyMatrix(const std::vector<zx::Vertex>& vertices_from, const std::vector<Vertex>& vertices_to) {
-        if (DEBUG) std::cout << " Matrix: " << vertices_from.size() << " x " << vertices_to.size() << std::endl;
+        THREAD_SAFE_PRINT( " Matrix: " << vertices_from.size() << " x " << vertices_to.size() << std::endl);
         gf2Mat adjMat{vertices_from.size(), gf2Vec(vertices_to.size(), false)};
         for (size_t i = 0; i < vertices_from.size(); ++i) {
             for (size_t j = 0; j < vertices_to.size(); ++j) {
@@ -1087,19 +1050,19 @@ namespace zx {
     }
 
     std::vector<std::pair<int, int>> ExtractorParallel::permutation_as_swaps(std::map<int, int> perm) {
-        if (DEBUG) std::cout << "Perm:" << std::endl;
+        THREAD_SAFE_PRINT( "Perm:" << std::endl);
         //if(DEBUG)printVector(perm);
 
         std::vector<std::pair<int, int>> swaps;
-        if (DEBUG) std::cout << "Size: " << perm.size() << std::endl;
-        if (DEBUG) std::cout << "Size: " << perm.size() << std::endl;
+        THREAD_SAFE_PRINT( "Size: " << perm.size() << std::endl);
+        THREAD_SAFE_PRINT( "Size: " << perm.size() << std::endl);
 
         std::vector<int> l;
         for (size_t i = 0; i < perm.size(); ++i) {
             l.emplace_back(perm[i]);
         }
 
-        if (DEBUG) std::cout << "l:" << std::endl;
+        THREAD_SAFE_PRINT( "l:" << std::endl);
         //if(DEBUG)printVector(l);
 
         std::map<int, int> pinv;
@@ -1107,7 +1070,7 @@ namespace zx {
             pinv[i.second] = i.first;
         }
 
-        if (DEBUG) std::cout << "pinv:" << std::endl;
+        THREAD_SAFE_PRINT( "pinv:" << std::endl);
         //if(DEBUG)printVector(pinv);
 
         std::vector<int> linv;
@@ -1115,14 +1078,14 @@ namespace zx {
             linv.emplace_back(pinv[i]);
         }
 
-        if (DEBUG) std::cout << "linv:" << std::endl;
+        THREAD_SAFE_PRINT( "linv:" << std::endl);
         //if(DEBUG)printVector(linv);
 
         for (size_t i = 0; i < perm.size(); ++i) {
             if ((size_t)l[i] == i) continue;
             int t1 = l[i];
             int t2 = linv[i];
-            if (DEBUG) std::cout << "Adding swap gate at " << i << " , " << t2 << std::endl;
+            THREAD_SAFE_PRINT( "Adding swap gate at " << i << " , " << t2 << std::endl);
             swaps.emplace_back(std::pair<int, int>(i, t2));
             l[t2]    = t1;
             linv[t1] = t2;
@@ -1157,11 +1120,11 @@ namespace zx {
         #pragma omp critical(claim)
         {
             if(claimed_vertices->count(vertex) != 0) {
-                std::cout << thread_num << ": Failed to claim vertex " << vertex << std::endl;
+                THREAD_SAFE_PRINT( thread_num << ": Failed to claim vertex " << vertex << std::endl);
                 return false;
             }
             claimed_vertices->emplace(vertex, thread_num);
-            std::cout << thread_num << ": Successfully claimed vertex " << vertex << std::endl;
+            THREAD_SAFE_PRINT( thread_num << ": Successfully claimed vertex " << vertex << std::endl);
             return true;
         }
     }
@@ -1180,7 +1143,7 @@ namespace zx {
 
     // [CRITICAL] Claims the outputs with the current thread
     void ExtractorParallel::claimOutputs() {
-        std::cout << "Claiming outputs" << std::endl;
+        THREAD_SAFE_PRINT( "Claiming outputs" << std::endl);
         for(auto v : outputs) {
             claim(v);
         }
@@ -1206,7 +1169,7 @@ namespace zx {
             auto it = frontier.find(i);
 
             if (it == frontier.end()) { // qubit not in frontier
-                std::cout << "ERROR: Qubit not in frontier: " << i << std::endl;
+                THREAD_SAFE_PRINT( "ERROR: Qubit not in frontier: " << i << std::endl);
                 exit(-1);
             }
             size_t vertex = it->second;
@@ -1258,7 +1221,7 @@ namespace zx {
 
         //Measurement measurement = Measurement(true); // FIXME:
 
-        std::map<size_t, int> claimed_vertices;
+        std::unordered_map<size_t, int> claimed_vertices;
 
         ExtractorParallel extractor1(qc_extracted, zxDiag, 0, &claimed_vertices, measurement);
         ExtractorParallel extractor2(qc_extracted_2, zxDiag_reversed, 1, &claimed_vertices, measurement);
@@ -1271,26 +1234,27 @@ namespace zx {
         {
             if (omp_get_thread_num() == 0) {
                 extractor1.extract();
-                std::cout << "Extractor 1 finished" << std::endl;
+                std::cout << "Extractor 0 finished" << std::endl;
             } else {
                 extractor2.extract();
-                std::cout << "Extractor 2 finished" << std::endl;
+                std::cout << "Extractor 1 finished" << std::endl;
                 //std::cout << qc_extracted_2 << std::endl;
                 //qc_extracted_2.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted2.qasm");
             }
         }
 
         // TODO: Extract rest
-        std::cout << "Finalizing extraction" << std::endl;
-        std::cout << "--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------" << std::endl;
-        std::cout << "--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------" << std::endl;
-        std::cout << "--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------" << std::endl;
-        extractor1.parallelize = false;
+        THREAD_SAFE_PRINT( "Finalizing extraction" << std::endl);
+        THREAD_SAFE_PRINT( "--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------" << std::endl);
+        THREAD_SAFE_PRINT( "--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------" << std::endl);
+        THREAD_SAFE_PRINT( "--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------" << std::endl);
+        extractor1.deleted_edges = extractor2.deleted_edges;
+        extractor1.added_edges = extractor2.added_edges;
         extractor1.finalizeExtraction(extractor2.frontier);
         qc_extracted.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted2.qasm");
 
         // TODO: Combine diagrams
-        std::cout << "Combining diagrams" << std::endl;
+        THREAD_SAFE_PRINT( "Combining diagrams" << std::endl);
         qc_extracted_2.combine(qc_extracted);
 
         end = std::chrono::steady_clock::now();
@@ -1304,6 +1268,6 @@ namespace zx {
         qc_extracted_2.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted.qasm");
         std::cout << "Circuit " << circuitName << ":" << std::endl;
 
-        measurement.printMeasurements(measurementGroup, circuitName);
+        //measurement.printMeasurements(measurementGroup, circuitName);
     }
 } // namespace zx

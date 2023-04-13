@@ -21,21 +21,31 @@
 #include <omp.h>
 #include <optional>
 #include <tuple>
+#define THREAD_SAFE_PRINT(value) \
+    do { \
+        int tid = omp_get_thread_num(); \
+        std::ofstream ofs("H:/Uni/Masterarbeit/pyzx/thesis/thread_" + std::to_string(tid) + "_output.txt", std::ios_base::app); \
+        ofs << value; \
+    } while(0)
 
 namespace zx {
+    
 
     class ExtractorParallel {
     public:
-        ExtractorParallel(qc::QuantumComputation& circuit, ZXDiagram& diag, int thread_num, std::map<size_t, int>* claimed_vertices, Measurement measurement = Measurement(true));
+        ExtractorParallel(qc::QuantumComputation& circuit, ZXDiagram& diag, int thread_num, std::unordered_map<size_t, int>* claimed_vertices, Measurement measurement = Measurement(true));
 
         ExtractorParallel* other_extractor;
-        std::map<size_t, int>* claimed_vertices; // Vertices marked by the thread in parallel execution
+        std::unordered_map<size_t, int>* claimed_vertices; // Vertices marked by the thread in parallel execution
         
         void extract();
         void finalizeExtraction(std::map<zx::Qubit, zx::Vertex> other_frontier);
         std::vector<size_t> frontierToInputs();
         std::map<zx::Qubit, zx::Vertex> frontier;
         bool parallelize = true;
+
+        std::unordered_map<size_t, std::unordered_set<size_t>> deleted_edges;
+        std::unordered_map<size_t, std::unordered_set<size_t>> added_edges;
 
     private:
         qc::QuantumComputation& circuit;
@@ -56,8 +66,11 @@ namespace zx {
 
         bool processFrontier();
 
+
+        std::stringstream ts_printstream;
+
         std::vector<zx::Vertex> get_frontier_neighbors();
-        std::vector<zx::Vertex> get_frontier_neighbors_parallel();
+        std::vector<zx::Vertex> get_frontier_neighbors_parallel(std::vector<zx::Vertex>* frontier_values);
 
         gf2Mat getAdjacencyMatrix(const std::vector<zx::Vertex>& vertices_from, const std::vector<Vertex>& vertices_to);
 
@@ -83,10 +96,83 @@ namespace zx {
         bool isClaimed(size_t vertex);
         bool isClaimedBySelf(size_t vertex);
         bool isClaimedAnother(size_t vertex);
+        void unclaim(size_t vertex);
 
 
 
+        void printVector(std::vector<size_t> vec) {
+        for(auto const& v : vec) {
+            THREAD_SAFE_PRINT( v << " ,");
+        }
+        THREAD_SAFE_PRINT( std::endl);
+    }
 
+    void printVector(std::vector<dd::Qubit> vec) {
+        for(auto const& v : vec) {
+            THREAD_SAFE_PRINT( v << " ,");
+        }
+        THREAD_SAFE_PRINT( std::endl);
+    }
+
+    void printVector(std::vector<int> vec) {
+        for(auto const& v : vec) {
+            THREAD_SAFE_PRINT( v << " ,");
+        }
+        THREAD_SAFE_PRINT( std::endl);
+    }
+
+    void printVector(std::map<int, int> vec) {
+        for(auto const& v : vec) {
+            THREAD_SAFE_PRINT( v.first << " : " << v.second << " ,");
+        }
+        THREAD_SAFE_PRINT( std::endl);
+    }
+    void printVector(std::map<zx::Qubit, zx::Vertex> vec) {
+        for(auto const& v : vec) {
+            THREAD_SAFE_PRINT( v.first << " : " << v.second << " ,");
+        }
+        THREAD_SAFE_PRINT( std::endl);
+    }
+    void printVector(std::map<zx::Vertex, zx::Vertex> vec) {
+        for(auto const& v : vec) {
+            THREAD_SAFE_PRINT( v.first << " : " << v.second << " ,");
+        }
+        THREAD_SAFE_PRINT( std::endl);
+    }
+    void printVector(std::map<zx::Vertex, int> vec) {
+        for(auto const& v : vec) {
+            THREAD_SAFE_PRINT( v.first << " : " << v.second << " ,");
+        }
+        THREAD_SAFE_PRINT( std::endl);
+    }
+
+    void printVector(std::vector<bool> vec) {
+        for(auto const& v : vec) {
+            THREAD_SAFE_PRINT( v << " ,");
+        }
+        THREAD_SAFE_PRINT( std::endl);
+    }
+
+    void printVector(std::vector<std::pair<int, int>> vec) {
+        for(auto const& v : vec) {
+            THREAD_SAFE_PRINT( "(" << v.first << "," << v.second << ") ,");
+        }
+        THREAD_SAFE_PRINT( std::endl);
+    }
+
+    void printVector(std::set<std::pair<zx::Vertex, zx::Vertex>> vec) {
+        for(auto const& v : vec) {
+            THREAD_SAFE_PRINT( "(" << v.first << "," << v.second << ") ,");
+        }
+        THREAD_SAFE_PRINT( std::endl);
+    }
+
+    void printMatrix(gf2Mat matrix) {
+        for(auto const& row : matrix) {
+            printVector(row);
+        }
+        THREAD_SAFE_PRINT( std::endl);
+    }
 
     };
     
