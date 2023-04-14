@@ -61,7 +61,7 @@ namespace zx {
 
     ExtractorParallel* other_extractor;
 
-    void ExtractorParallel::finalizeExtraction(std::map<zx::Qubit, zx::Vertex> other_frontier) {
+    void ExtractorParallel::finalizeExtraction(std::map<zx::Qubit, zx::Vertex> other_frontier, std::unordered_set<size_t> claimed_neighbors_other) {
         parallelize = false;
 
         // Remove all edges between the other extractor's frontier
@@ -71,7 +71,7 @@ namespace zx {
             auto neighbors = diag.getNeighborVertices(v);
 
             for(auto w : neighbors) {
-                if(!isClaimedAnother(w)) continue;
+                if(!isClaimedAnother(w) || claimed_neighbors_other.count(w)) continue;
                 THREAD_SAFE_PRINT( "Removing edge " << v << " , " << w << std::endl);
                 diag.removeEdge(v, w);
             }
@@ -472,6 +472,8 @@ namespace zx {
         if (!singleOneRowExists) {
             THREAD_SAFE_PRINT( "Ws is 0" << std::endl);
             if(!parallelize) exit(0);
+
+            
             return false;
             diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test.json", inputs);
             exit(0);
@@ -675,6 +677,7 @@ namespace zx {
                 if(parallelize && thread_num != 0) { // Vertex will be behind the frontier. We no longer need to store edge information about it.
                     deleted_edges[chain[i]].clear();
                     added_edges[chain[i]].clear();
+                    claimed_neighbors.erase(chain[i]);
                 }
             }
 
@@ -689,6 +692,7 @@ namespace zx {
 
 
             if(parallelize && thread_num != 0) { // Vertex will be in the frontier. We no longer need to store edge information about it.
+                claimed_neighbors.erase(last_in_chain);
                 deleted_edges[last_in_chain].clear();
                 added_edges[last_in_chain].clear();
             }
@@ -763,7 +767,7 @@ namespace zx {
 
                 if(marked_found) {
                     // Found a single marked vertex: Remove frontier vertex
-                    THREAD_SAFE_PRINT( "Found marked neighbor, removing " << *it << " , " << omp_get_thread_num() << std::endl);
+                    THREAD_SAFE_PRINT( "Found marked neighbor, removing " << *it << std::endl);
                     it = frontier_values->erase(it);
                 }
                 else {
@@ -772,6 +776,7 @@ namespace zx {
                     THREAD_SAFE_PRINT( "FN Marked " << w << " , " << omp_get_thread_num() << std::endl);
                     neighbors.emplace_back(w);
                     claimed_vertices->emplace(w, omp_get_thread_num());
+                    if(thread_num != 0) claimed_neighbors.emplace(w);
                 }
                 
                 ++it;
@@ -1250,7 +1255,7 @@ namespace zx {
         THREAD_SAFE_PRINT( "--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------" << std::endl);
         extractor1.deleted_edges = extractor2.deleted_edges;
         extractor1.added_edges = extractor2.added_edges;
-        extractor1.finalizeExtraction(extractor2.frontier);
+        extractor1.finalizeExtraction(extractor2.frontier, extractor2.claimed_neighbors);
         qc_extracted.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted2.qasm");
 
         // TODO: Combine diagrams

@@ -39,13 +39,14 @@ namespace zx {
         std::unordered_map<size_t, int>* claimed_vertices; // Vertices marked by the thread in parallel execution
         
         void extract();
-        void finalizeExtraction(std::map<zx::Qubit, zx::Vertex> other_frontier);
+        void finalizeExtraction(std::map<zx::Qubit, zx::Vertex> other_frontier, std::unordered_set<size_t> claimed_neighbors_other);
         std::vector<size_t> frontierToInputs();
         std::map<zx::Qubit, zx::Vertex> frontier;
         bool parallelize = true;
 
         std::unordered_map<size_t, std::unordered_set<size_t>> deleted_edges;
         std::unordered_map<size_t, std::unordered_set<size_t>> added_edges;
+        std::unordered_set<size_t> claimed_neighbors;
 
     private:
         qc::QuantumComputation& circuit;
@@ -96,7 +97,6 @@ namespace zx {
         bool isClaimed(size_t vertex);
         bool isClaimedBySelf(size_t vertex);
         bool isClaimedAnother(size_t vertex);
-        void unclaim(size_t vertex);
 
 
 
