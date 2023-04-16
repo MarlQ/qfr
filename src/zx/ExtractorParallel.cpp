@@ -411,6 +411,7 @@ namespace zx {
         }
 
         frontier_neighbors = parallelize ? get_frontier_neighbors_parallel(&frontier_values) : get_frontier_neighbors();
+        if(frontier_neighbors.size() <= 0) return false;
 
         THREAD_SAFE_PRINT( "Frontier neighbors:" << std::endl);
         if(DEBUG)printVector(frontier_neighbors);
