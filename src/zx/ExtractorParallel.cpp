@@ -184,10 +184,10 @@ namespace zx {
         circuit.reverse();
 
         // Additional CNOT reduction.
-        auto begin = std::chrono::steady_clock::now();
+        ////auto //begin = std::chrono::steady_clock::now();
         qc::CircuitOptimizer::cancelCNOTs(circuit);
-        auto end = std::chrono::steady_clock::now();
-        measurement.addMeasurement("extract:cancelCNOTs", begin, end);
+        //auto end = std::chrono::steady_clock::now();
+        //measurement.addMeasurement("extract:cancelCNOTs", begin, end);
         return;
     }
 
@@ -216,10 +216,10 @@ namespace zx {
         int i = 1; // Iteration counter. For debugging only.
 
         while (frontier.size() > 0) {
-            auto begin = std::chrono::steady_clock::now();
+            ////auto //begin = std::chrono::steady_clock::now();
             extractRZ_CZ();
-            auto end = std::chrono::steady_clock::now();
-            measurement.addMeasurement("extract:extractRZ_CZ", begin, end);
+            //auto end = std::chrono::steady_clock::now();
+            //measurement.addMeasurement("extract:extractRZ_CZ", begin, end);
 
 
 /* 
@@ -237,15 +237,15 @@ namespace zx {
             
             
 
-            begin = std::chrono::steady_clock::now();
+            //begin = std::chrono::steady_clock::now();
             bool interrupted_cnot = !extractCNOT();
-            end = std::chrono::steady_clock::now();
-            measurement.addMeasurement("extract:extractCNOT", begin, end);
+            //end = std::chrono::steady_clock::now();
+            //measurement.addMeasurement("extract:extractCNOT", begin, end);
 
-            begin = std::chrono::steady_clock::now();
+            //begin = std::chrono::steady_clock::now();
             bool interrupted_processing = !processFrontier();
-            end = std::chrono::steady_clock::now();
-            measurement.addMeasurement("extract:processFrontier", begin, end);
+            //end = std::chrono::steady_clock::now();
+            //measurement.addMeasurement("extract:processFrontier", begin, end);
             if(DEBUG) THREAD_SAFE_PRINT( "Iteration " << i << " thread " << omp_get_thread_num() << std::endl);
             i++;
             if(/* interrupted_cnot ||  */interrupted_processing) {
@@ -314,10 +314,10 @@ namespace zx {
         if (omp_get_thread_num() == 0) circuit.reverse();
 
         // Additional CNOT reduction.
-        auto begin = std::chrono::steady_clock::now();
+        ////auto //begin = std::chrono::steady_clock::now();
         qc::CircuitOptimizer::cancelCNOTs(circuit);
-        auto end = std::chrono::steady_clock::now();
-        measurement.addMeasurement("extract:cancelCNOTs", begin, end);
+        //auto end = std::chrono::steady_clock::now();
+        //measurement.addMeasurement("extract:cancelCNOTs", begin, end);
         return;
     }
 
@@ -334,7 +334,7 @@ namespace zx {
     void ExtractorParallel::extractRZ_CZ() {
         THREAD_SAFE_PRINT( "Extracting RZ and CZ gates..." << std::endl);
 
-        auto begin = std::chrono::steady_clock::now();
+        ////auto //begin = std::chrono::steady_clock::now();
         // Extract RZ: Add phase-gate at v with phase p
         for (auto v: frontier) {
             if (!diag.phase(v.second).isZero()) {
@@ -347,10 +347,10 @@ namespace zx {
                 diag.setPhase(v.second, PiExpression());
             }
         }
-        auto end = std::chrono::steady_clock::now();
-        measurement.addMeasurement("extract:extractRZ_CZ:PhaseGates", begin, end);
+        //auto end = std::chrono::steady_clock::now();
+        //measurement.addMeasurement("extract:extractRZ_CZ:PhaseGates", begin, end);
 
-        begin = std::chrono::steady_clock::now();
+        //begin = std::chrono::steady_clock::now();
 
         // Extract CZ
         for (auto v: frontier) { // IMPROVE: Can this be within the same for loop as the prior?
@@ -368,8 +368,8 @@ namespace zx {
                 }
             }
         }
-        end = std::chrono::steady_clock::now();
-        measurement.addMeasurement("extract:extractRZ_CZ:CZGates", begin, end);
+        //end = std::chrono::steady_clock::now();
+        //measurement.addMeasurement("extract:extractRZ_CZ:CZGates", begin, end);
     }
 
     bool ExtractorParallel::extractCNOT() {
@@ -380,7 +380,7 @@ namespace zx {
         std::vector<zx::Vertex> temp;
 
         // Check for remaining vertices
-        auto begin = std::chrono::steady_clock::now();
+        ////auto //begin = std::chrono::steady_clock::now();
         for (auto v: frontier) {
             auto neighbors = diag.getNeighborVertices(v.second); //FIXME: Not necessary?
             THREAD_SAFE_PRINT( "neighbors of " << v.second << " :" << std::endl);
@@ -390,8 +390,8 @@ namespace zx {
                 return true;
             }
         }
-        auto end = std::chrono::steady_clock::now();
-        measurement.addMeasurement("extract:extractCNOT:check", begin, end);
+        //auto end = std::chrono::steady_clock::now();
+        //measurement.addMeasurement("extract:extractCNOT:check", begin, end);
         THREAD_SAFE_PRINT( "Frontier CNOT extraction... " << std::endl);
 
         THREAD_SAFE_PRINT( "Frontier:" << std::endl);
@@ -399,7 +399,7 @@ namespace zx {
 
         THREAD_SAFE_PRINT( "Verts remaining:" << std::endl);
         if(DEBUG)printVector(temp);
-        begin = std::chrono::steady_clock::now();
+        //begin = std::chrono::steady_clock::now();
         std::vector<zx::Vertex> frontier_values;
         for (const auto& [key, value]: frontier) {
             frontier_values.push_back(value);
@@ -414,8 +414,8 @@ namespace zx {
     
         // TODO: Omit frontier vertices that are neighbors to marked vertices
         auto adjMatrix = getAdjacencyMatrix(frontier_values, frontier_neighbors);
-        end            = std::chrono::steady_clock::now();
-        measurement.addMeasurement("extract:extractCNOT:biadjacencyMatrix", begin, end);
+        //end            = std::chrono::steady_clock::now();
+        //measurement.addMeasurement("extract:extractCNOT:biadjacencyMatrix", begin, end);
 
         THREAD_SAFE_PRINT( "Adjacency Matrix:" << std::endl);
         if(DEBUG)printMatrix(adjMatrix);
@@ -440,11 +440,11 @@ namespace zx {
         }
 
         // Gauss reduction on biadjacency matrix
-        begin                                                      = std::chrono::steady_clock::now();
+        //begin                                                      = std::chrono::steady_clock::now();
         std::vector<std::pair<zx::Qubit, zx::Qubit>> rowOperations = gaussElimination(adjMatrix);
 
-        end = std::chrono::steady_clock::now();
-        measurement.addMeasurement("extract:extractCNOT:gaussElimination", begin, end);
+        //end = std::chrono::steady_clock::now();
+        //measurement.addMeasurement("extract:extractCNOT:gaussElimination", begin, end);
         THREAD_SAFE_PRINT( "After Gauss Elimination:" << std::endl);
         if(DEBUG)printMatrix(adjMatrix);
         THREAD_SAFE_PRINT( "Row Operations:" << std::endl);
@@ -468,7 +468,7 @@ namespace zx {
         //std::cout << "Vector ws:" << std::endl);
         if(DEBUG)printVector(ws);
 
-        begin = std::chrono::steady_clock::now();
+        //begin = std::chrono::steady_clock::now();
         if (!singleOneRowExists) {
             THREAD_SAFE_PRINT( "Ws is 0" << std::endl);
             if(!parallelize) exit(0);
@@ -528,13 +528,13 @@ namespace zx {
             }
             return true;
         }
-        end = std::chrono::steady_clock::now();
+        //end = std::chrono::steady_clock::now();
 
         // IMPROVE: Removing duplicate row operations
         //filter_duplicate_cnots(rowOperations);
 
-        measurement.addMeasurement("extract:extractCNOT:YZSpiders", begin, end);
-        begin = std::chrono::steady_clock::now();
+        //measurement.addMeasurement("extract:extractCNOT:YZSpiders", begin, end);
+        //begin = std::chrono::steady_clock::now();
 
         // Extract CNOTs
         for (auto r: rowOperations) {
@@ -580,8 +580,8 @@ namespace zx {
                 }
             }
         }
-        end = std::chrono::steady_clock::now();
-        measurement.addMeasurement("extract:extractCNOT:CNOTFromOperations", begin, end);
+        //end = std::chrono::steady_clock::now();
+        //measurement.addMeasurement("extract:extractCNOT:CNOTFromOperations", begin, end);
 
         return true;
     }
@@ -1203,17 +1203,14 @@ namespace zx {
         auto begin = std::chrono::steady_clock::now();
 
         zx::ZXDiagram zxDiag = zx::FunctionalityConstruction::buildFunctionality(&qc);
-        auto          end    = std::chrono::steady_clock::now();
-        measurement.addMeasurement("buildFunctionality", begin, end);
 
         zxDiag.toGraphlike();
 
         std::cout << "Simplifying" << std::endl;
-        begin = std::chrono::steady_clock::now();
         zx::interiorCliffordSimp(zxDiag);
         //zx::fullReduce(zxDiag);
-        end = std::chrono::steady_clock::now();
-        measurement.addMeasurement("interiorCliffordSimp", begin, end);
+        auto end = std::chrono::steady_clock::now();
+        measurement.addMeasurement("simplification", begin, end);
 
         std::cout << "Extracting" << std::endl;
 
@@ -1273,6 +1270,6 @@ namespace zx {
         qc_extracted_2.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted.qasm");
         std::cout << "Circuit " << circuitName << ":" << std::endl;
 
-        //measurement.printMeasurements(measurementGroup, circuitName);
+        measurement.printMeasurements(measurementGroup, circuitName, "H:/Uni/Masterarbeit/measurements_new.csv");
     }
 } // namespace zx
