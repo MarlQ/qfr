@@ -776,12 +776,13 @@ namespace zx {
 
                 for (auto w: v_neighbors) {
                     if (!contains(outputs, w) && !contains(neighbors, w) && ! contains(frontier, w)) {
-
                         // Check whether neighbor is unmarked
-                        bool marked = claimed_vertices->count(w) != 0;
+                        auto it_c = claimed_vertices->find(w);
+                        bool marked = it_c != claimed_vertices->end() && it_c->second != thread_num;
                         if(marked) { // Marked found: stop
-                        marked_found = true;   
-                        break;
+                            THREAD_SAFE_PRINT("Found marked neighbor: " << w << std::endl);
+                            marked_found = true;   
+                            break;
                         }
                         
                         neighbors_current.emplace_back(w);
@@ -790,13 +791,13 @@ namespace zx {
 
                 if(marked_found) {
                     // Found a single marked vertex: Remove frontier vertex
-                    THREAD_SAFE_PRINT( "Found marked neighbor, removing " << *it << std::endl);
+                    THREAD_SAFE_PRINT( "Removing from frontier values: " << *it << std::endl);
                     it = frontier_values->erase(it);
                 }
                 else {
                 // All unmarked: add to frontier neighbors and mark all
                 for(auto w: neighbors_current) {
-                    THREAD_SAFE_PRINT( "FN Marked " << w << " , " << omp_get_thread_num() << std::endl);
+                    THREAD_SAFE_PRINT( "(FN) Successfully claimed vertex " << w << " , " << omp_get_thread_num() << std::endl);
                     neighbors.emplace_back(w);
                     claimed_vertices->emplace(w, omp_get_thread_num());
                     if(thread_num != 0) claimed_neighbors.emplace(w);
@@ -1145,9 +1146,11 @@ namespace zx {
     // Returns true when the vertex was successfully claimed,
     // or false if it was already claimed.
     bool ExtractorParallel::claim(size_t vertex) {
+        if(!parallelize) return true;
         #pragma omp critical(claim)
         {
-            if(claimed_vertices->count(vertex) != 0) {
+            auto it = claimed_vertices->find(vertex);
+            if(it != claimed_vertices->end() && it->second != thread_num) {
                 THREAD_SAFE_PRINT( thread_num << ": Failed to claim vertex " << vertex << std::endl);
                 return false;
             }
