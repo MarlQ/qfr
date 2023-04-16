@@ -21,12 +21,20 @@
 #include <omp.h>
 #include <optional>
 #include <tuple>
+#define DEBUG true
+#ifdef DEBUG
 #define THREAD_SAFE_PRINT(value) \
     do { \
-        int tid = omp_get_thread_num(); \
-        std::ofstream ofs("H:/Uni/Masterarbeit/pyzx/thesis/thread_" + std::to_string(tid) + "_output.txt", std::ios_base::app); \
-        ofs << value; \
+        if (DEBUG) { \
+            int tid = omp_get_thread_num(); \
+            std::ofstream ofs("H:/Uni/Masterarbeit/pyzx/thesis/thread_" + std::to_string(tid) + "_output.txt", std::ios_base::app); \
+            ofs << value; \
+        } \
     } while(0)
+#else
+#define THREAD_SAFE_PRINT(value) 
+#endif
+
 
 namespace zx {
     
@@ -34,7 +42,7 @@ namespace zx {
     class ExtractorParallel {
     public:
         ExtractorParallel(qc::QuantumComputation& circuit, ZXDiagram& diag, int thread_num, std::unordered_map<size_t, int>* claimed_vertices, Measurement measurement = Measurement(true));
-
+        ExtractorParallel(qc::QuantumComputation& circuit, ZXDiagram& diag, Measurement measurement = Measurement(true));
         ExtractorParallel* other_extractor;
         std::unordered_map<size_t, int>* claimed_vertices; // Vertices marked by the thread in parallel execution
         
@@ -176,6 +184,6 @@ namespace zx {
 
     };
     
-    void testParallelExtraction(std::string circuitName="vbe_adder_3.qasm", std::string measurementGroup="1");
+    void testParallelExtraction(std::string circuitName="vbe_adder_3.qasm", std::string measurementGroup="1", bool parallelization=false);
 
 } // namespace zx

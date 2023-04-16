@@ -27,7 +27,11 @@ void show_usage(const std::string& name) {
 
 int main(int argc, char** argv) {
     std::cout << "Starting App" << std::endl;
-    if(argc > 2) zx::testParallelExtraction(argv[1], argv[2]);
+    
+    if(argc > 3) {
+        bool parallelization = argv[3] == "true" || argv[3] == "1" ? true : false;
+        zx::testParallelExtraction(argv[1], argv[2], argv[3]);
+    }
     else zx::testParallelExtraction();
     return 0;
 
