@@ -542,13 +542,30 @@ namespace zx {
         //measurement.addMeasurement("extract:extractCNOT:YZSpiders", begin, end);
         //begin = std::chrono::steady_clock::now();
 
+
         // Extract CNOTs
         for (auto r: rowOperations) {
+            auto r_1 = r.first;
+            auto r_2 = r.second;
+
+            if(parallelize) { // Since we previously may have removed values from the frontier, we have to find the true entries
+                // IMPROVE: CHeck whether this is necessary first
+                auto frontier_value_1 = frontier_values[r_1];
+                auto frontier_value_2 = frontier_values[r_2];
+
+                for (auto it = frontier.begin(); it != frontier.end(); ++it) {
+                    if (it->second == frontier_value_1) r_1 = it->first;
+                    else if(it->second == frontier_value_2) r_2 = it->first;
+                }
+                
+            }
+
+
             // From row operation: r.second = r.second + r.first
 
             auto it            = frontier.begin();
-            auto control_entry = std::next(it, r.second);
-            auto target_entry  = std::next(it, r.first);
+            auto control_entry = std::next(it, r_2);
+            auto target_entry  = std::next(it, r_1);
 
             auto control_qubit = control_entry->first;
             auto target_qubit  = target_entry->first;
