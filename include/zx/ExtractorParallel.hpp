@@ -78,8 +78,8 @@ namespace zx {
 
         std::stringstream ts_printstream;
 
-        std::vector<zx::Vertex> get_frontier_neighbors();
-        std::vector<zx::Vertex> get_frontier_neighbors_parallel(std::vector<zx::Vertex>* frontier_values);
+        bool get_frontier_neighbors();
+        bool get_frontier_neighbors_parallel(std::vector<zx::Vertex>* frontier_values);
 
         gf2Mat getAdjacencyMatrix(const std::vector<zx::Vertex>& vertices_from, const std::vector<Vertex>& vertices_to);
 

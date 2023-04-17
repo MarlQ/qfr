@@ -379,22 +379,20 @@ namespace zx {
 
     bool ExtractorParallel::extractCNOT() {
         THREAD_SAFE_PRINT( "Is CNOT extraction necessary?" << std::endl);
-        //bool vertsRemaining = false;
-        auto verts = diag.getVertices();
 
-        std::vector<zx::Vertex> temp;
-
-        // Check for remaining vertices
-        ////auto //begin = std::chrono::steady_clock::now();
-        for (auto v: frontier) {
-            auto neighbors = diag.getNeighborVertices(v.second); //FIXME: Not necessary?
-            THREAD_SAFE_PRINT( "neighbors of " << v.second << " :" << std::endl);
-            if(DEBUG)printVector(neighbors);
-            if (neighbors.size() <= 2) {
-                THREAD_SAFE_PRINT( "No need for CNOT extraction. " << std::endl);
-                return true;
-            }
+        std::vector<zx::Vertex> frontier_values;
+        for (const auto& [key, value]: frontier) {
+            frontier_values.push_back(value);
         }
+
+        // Get frontier neighbors and check at the same time
+        ////auto //begin = std::chrono::steady_clock::now();
+        bool cnot_necessary = parallelize ? get_frontier_neighbors_parallel(&frontier_values) : get_frontier_neighbors();
+        if(!cnot_necessary) {
+            THREAD_SAFE_PRINT( "No need for CNOT extraction. " << std::endl);
+            return true;
+        }
+
         //auto end = std::chrono::steady_clock::now();
         //measurement.addMeasurement("extract:extractCNOT:check", begin, end);
         THREAD_SAFE_PRINT( "Frontier CNOT extraction... " << std::endl);
@@ -402,15 +400,10 @@ namespace zx {
         THREAD_SAFE_PRINT( "Frontier:" << std::endl);
         if(DEBUG)printVector(frontier);
 
-        THREAD_SAFE_PRINT( "Verts remaining:" << std::endl);
-        if(DEBUG)printVector(temp);
         //begin = std::chrono::steady_clock::now();
-        std::vector<zx::Vertex> frontier_values;
-        for (const auto& [key, value]: frontier) {
-            frontier_values.push_back(value);
-        }
+        
 
-        frontier_neighbors = parallelize ? get_frontier_neighbors_parallel(&frontier_values) : get_frontier_neighbors();
+        //frontier_neighbors = parallelize ? get_frontier_neighbors_parallel(&frontier_values) : get_frontier_neighbors();
         if(frontier_neighbors.size() <= 0) return false;
 
         THREAD_SAFE_PRINT( "Frontier neighbors:" << std::endl);
@@ -747,11 +740,12 @@ namespace zx {
         return true;
     }
 
-    std::vector<zx::Vertex> ExtractorParallel::get_frontier_neighbors() {
+    bool ExtractorParallel::get_frontier_neighbors() {
         std::vector<Vertex> neighbors;
 
         for (auto v: frontier) {
             auto v_neighbors = diag.getNeighborVertices(v.second);
+            if(v_neighbors.size() <= 2) return false; // CNOT not necessary: vertex only has one non-boundary neighbor
             for (auto w: v_neighbors) {
                 if (!contains(outputs, w) && !contains(neighbors, w)) {
                     neighbors.emplace_back(w);
@@ -759,29 +753,30 @@ namespace zx {
             }
         }
 
-        return neighbors;
+        frontier_neighbors = neighbors;
+        return true;
     }
 
 
     // In contrast to the normal get_frontier_neighbors, this function only adds unmarked neighbors.
     // If a neighbor was marked already, it retroactively removes the froniter vertex, and all its neighbors
-    std::vector<zx::Vertex> ExtractorParallel::get_frontier_neighbors_parallel(std::vector<zx::Vertex>* frontier_values) {
+    bool ExtractorParallel::get_frontier_neighbors_parallel(std::vector<zx::Vertex>* frontier_values) {
         std::vector<Vertex> neighbors;
         #pragma omp critical(claim)
         {
             for (auto it = frontier_values->cbegin(); it != frontier_values->cend();) {
                 auto v_neighbors = diag.getNeighborVertices(*it);
                 std::vector<Vertex> neighbors_current;
-                bool marked_found = false;
+                bool claimed_vertex_found = false;
 
                 for (auto w: v_neighbors) {
-                    if (!contains(outputs, w) && !contains(neighbors, w) && ! contains(frontier, w)) {
+                    if (!contains(outputs, w) && !contains(neighbors, w) /* && ! contains(frontier, w) */) {
                         // Check whether neighbor is unmarked
                         auto it_c = claimed_vertices->find(w);
-                        bool marked = it_c != claimed_vertices->end() && it_c->second != thread_num;
-                        if(marked) { // Marked found: stop
-                            THREAD_SAFE_PRINT("Found marked neighbor: " << w << std::endl);
-                            marked_found = true;   
+                        bool claimed_by_another = it_c != claimed_vertices->end() && it_c->second != thread_num;
+                        if(claimed_by_another) { // Marked found: stop
+                            THREAD_SAFE_PRINT("Found claimed neighbor: " << w << std::endl);
+                            claimed_vertex_found = true;   
                             break;
                         }
                         
@@ -789,26 +784,33 @@ namespace zx {
                     }
                 }
 
-                if(marked_found) {
+                if(claimed_vertex_found) {
                     // Found a single marked vertex: Remove frontier vertex
                     THREAD_SAFE_PRINT( "Removing from frontier values: " << *it << std::endl);
                     it = frontier_values->erase(it);
                 }
                 else {
-                // All unmarked: add to frontier neighbors and mark all
-                for(auto w: neighbors_current) {
-                    THREAD_SAFE_PRINT( "(FN) Successfully claimed vertex " << w << " , " << omp_get_thread_num() << std::endl);
-                    neighbors.emplace_back(w);
-                    claimed_vertices->emplace(w, omp_get_thread_num());
-                    if(thread_num != 0) claimed_neighbors.emplace(w);
-                }
-                
-                ++it;
+                    // Check whether CNOT is necessary
+                    if(v_neighbors.size() <= 2) {
+                        THREAD_SAFE_PRINT("Vertex with only one neighbor found: " << *it << std::endl);
+                        if(DEBUG) printVector(v_neighbors);
+                        return false; // CNOT not necessary: vertex only has one non-boundary neighbor 
+                    }
+                    // All unmarked: add to frontier neighbors and mark all
+                    for(auto w: neighbors_current) {
+                        THREAD_SAFE_PRINT( "(FN) Successfully claimed vertex " << w << " , " << omp_get_thread_num() << std::endl);
+                        neighbors.emplace_back(w);
+                        claimed_vertices->emplace(w, omp_get_thread_num());
+                        if(thread_num != 0) claimed_neighbors.emplace(w);
+                    }
+                    
+                    ++it;
                 }
 
             }
         }
-        return neighbors;
+        frontier_neighbors = neighbors;
+        return true;
     }
 
     gf2Mat ExtractorParallel::getAdjacencyMatrix(const std::vector<zx::Vertex>& vertices_from, const std::vector<Vertex>& vertices_to) {
