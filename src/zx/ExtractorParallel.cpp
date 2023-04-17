@@ -1214,7 +1214,7 @@ namespace zx {
     
 
     void testParallelExtraction(std::string circuitName, std::string measurementGroup, bool parallelization) {
-        std::cout << "Parallel Extraction testing" << std::endl;
+        std::cout << "Extraction testing" << std::endl;
         Measurement measurement;
 
         if (DEBUG) std::cout << "Setting up...\n";
@@ -1241,13 +1241,13 @@ namespace zx {
         std::cout << "Extracting" << std::endl;
 
         if(parallelization) {
-            begin = std::chrono::steady_clock::now();
-            qc::QuantumComputation qc_extracted = qc::QuantumComputation(zxDiag.getNQubits());
+            std::cout << "Starting parallel extraction" << std::endl;
 
+            begin = std::chrono::steady_clock::now(); // Start measurement
+
+            qc::QuantumComputation qc_extracted = qc::QuantumComputation(zxDiag.getNQubits());
             zx::ZXDiagram          zxDiag_reversed = zxDiag.reverse();
             qc::QuantumComputation qc_extracted_2  = qc::QuantumComputation(zxDiag_reversed.getNQubits());
-
-            //Measurement measurement = Measurement(true); // FIXME:
 
             std::unordered_map<size_t, int> claimed_vertices;
 
@@ -1257,7 +1257,6 @@ namespace zx {
             extractor1.other_extractor = &extractor2; // IMPROVE: needed?
             extractor2.other_extractor = &extractor1;
 
-            std::cout << "Starting parallel extraction" << std::endl;
             #pragma omp parallel num_threads(2) shared(claimed_vertices)
             {
                 if (omp_get_thread_num() == 0) {
@@ -1277,31 +1276,39 @@ namespace zx {
             extractor1.deleted_edges = extractor2.deleted_edges;
             extractor1.added_edges = extractor2.added_edges;
             extractor1.finalizeExtraction(extractor2.frontier, extractor2.claimed_neighbors);
+            qc_extracted_2.combine(qc_extracted);
+
+            end = std::chrono::steady_clock::now(); // End measurement
+
             qc_extracted.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted2.qasm");
 
             // Combine diagrams
             THREAD_SAFE_PRINT( "Combining diagrams" << std::endl);
-            qc_extracted_2.combine(qc_extracted);
+            
 
-            end = std::chrono::steady_clock::now();
+            
             measurement.addMeasurement("extract", begin, end);
 
             std::cout << "Finished Circuit" << std::endl;
-            std::cout << qc_extracted_2 << std::endl;
+            //std::cout << qc_extracted_2 << std::endl;
 
             qc_extracted_2.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted.qasm");
             std::cout << "Circuit " << circuitName << ":" << std::endl;
         }
         else {
-            begin = std::chrono::steady_clock::now();
+            std::cout << "Starting non-parallel extraction" << std::endl;
+
+            begin = std::chrono::steady_clock::now(); // Start measurement
+
             qc::QuantumComputation qc_extracted = qc::QuantumComputation(zxDiag.getNQubits());
             ExtractorParallel extractor1(qc_extracted, zxDiag, measurement);
             extractor1.extract();
 
-            end = std::chrono::steady_clock::now();
+            end = std::chrono::steady_clock::now(); // End measurement
             measurement.addMeasurement("extract", begin, end);
+            
             std::cout << "Finished Circuit" << std::endl;
-            std::cout << qc_extracted << std::endl;
+            //std::cout << qc_extracted << std::endl;
 
             qc_extracted.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted.qasm");
             std::cout << "Circuit " << circuitName << ":" << std::endl;
