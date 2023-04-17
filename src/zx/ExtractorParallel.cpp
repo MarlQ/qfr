@@ -23,7 +23,7 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 #include <omp.h>
-#define DEBUG true
+#define DEBUG false
 
 
 /**
@@ -67,7 +67,7 @@ namespace zx {
 
     ExtractorParallel* other_extractor;
 
-    void ExtractorParallel::finalizeExtraction(std::map<zx::Qubit, zx::Vertex> other_frontier, std::unordered_set<size_t> claimed_neighbors_other) {
+    int ExtractorParallel::finalizeExtraction(std::map<zx::Qubit, zx::Vertex> other_frontier, std::unordered_set<size_t> claimed_neighbors_other) {
         parallelize = false;
 
         // Remove all edges between the other extractor's frontier
@@ -194,10 +194,10 @@ namespace zx {
         qc::CircuitOptimizer::cancelCNOTs(circuit);
         //auto end = std::chrono::steady_clock::now();
         //measurement.addMeasurement("extract:cancelCNOTs", begin, end);
-        return;
+        return i;
     }
 
-    void ExtractorParallel::extract() {
+    int ExtractorParallel::extract() {
         THREAD_SAFE_PRINT( "Extractor " << omp_get_thread_num() << " started!" << std::endl);
         initFrontier();
         
@@ -257,7 +257,7 @@ namespace zx {
             if(/* interrupted_cnot ||  */interrupted_processing) {
                 extractRZ_CZ();
                 if(DEBUG) THREAD_SAFE_PRINT( "Thread " << thread_num << " was interrupted! ------------------------------------------------------------------------" << std::endl);
-                return;
+                return i;
             }
             
         };
@@ -323,7 +323,7 @@ namespace zx {
         qc::CircuitOptimizer::cancelCNOTs(circuit);
         //auto end = std::chrono::steady_clock::now();
         //measurement.addMeasurement("extract:cancelCNOTs", begin, end);
-        return;
+        return i;
     }
 
     void ExtractorParallel::initFrontier() {
@@ -1241,7 +1241,7 @@ namespace zx {
         measurement.addMeasurement("simplification", begin, end);
 
         std::cout << "Extracting" << std::endl;
-
+        int iterations = 0;
         if(parallelization) {
             std::cout << "Starting parallel extraction" << std::endl;
 
@@ -1259,13 +1259,16 @@ namespace zx {
             extractor1.other_extractor = &extractor2; // IMPROVE: needed?
             extractor2.other_extractor = &extractor1;
 
+            int iterations_1 = 0;
+            int iterations_2 = 0;
+
             #pragma omp parallel num_threads(2) shared(claimed_vertices)
             {
                 if (omp_get_thread_num() == 0) {
-                    extractor1.extract();
+                    iterations_1 = extractor1.extract();
                     if(DEBUG) std::cout << "Extractor 0 finished" << std::endl;
                 } else {
-                    extractor2.extract();
+                    iterations_2 = extractor2.extract();
                     if(DEBUG) std::cout << "Extractor 1 finished" << std::endl;
                 }
             }
@@ -1277,7 +1280,7 @@ namespace zx {
             THREAD_SAFE_PRINT( "--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------" << std::endl);
             extractor1.deleted_edges = extractor2.deleted_edges;
             extractor1.added_edges = extractor2.added_edges;
-            extractor1.finalizeExtraction(extractor2.frontier, extractor2.claimed_neighbors);
+            int iterations_seq = extractor1.finalizeExtraction(extractor2.frontier, extractor2.claimed_neighbors);
             qc_extracted_2.combine(qc_extracted);
 
             end = std::chrono::steady_clock::now(); // End measurement
@@ -1290,12 +1293,15 @@ namespace zx {
 
             
             measurement.addMeasurement("extract", begin, end);
-
+            
             std::cout << "Finished Circuit" << std::endl;
             //std::cout << qc_extracted_2 << std::endl;
 
             qc_extracted_2.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted.qasm");
             std::cout << "Circuit " << circuitName << ":" << std::endl;
+            std::cout << "Parallel iterations: " << iterations_1 << "||" << iterations_2 << std::endl;
+
+            iterations = std::max(iterations_1, iterations_2) + iterations_seq;
         }
         else {
             std::cout << "Starting non-parallel extraction" << std::endl;
@@ -1304,7 +1310,7 @@ namespace zx {
 
             qc::QuantumComputation qc_extracted = qc::QuantumComputation(zxDiag.getNQubits());
             ExtractorParallel extractor1(qc_extracted, zxDiag, measurement);
-            extractor1.extract();
+            iterations = extractor1.extract();
 
             end = std::chrono::steady_clock::now(); // End measurement
             measurement.addMeasurement("extract", begin, end);
@@ -1315,7 +1321,7 @@ namespace zx {
             qc_extracted.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted.qasm");
             std::cout << "Circuit " << circuitName << ":" << std::endl;
         }
-
+        std::cout << "Total iterations: " << iterations << std::endl;
         
         //std::cout << "Circuit to extract:" << std::endl;
         //std::cout << qc << std::endl;
