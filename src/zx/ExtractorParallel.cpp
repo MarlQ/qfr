@@ -23,7 +23,7 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 #include <omp.h>
-#define DEBUG true
+#define DEBUG false
 
 
 /**
@@ -83,10 +83,10 @@ namespace zx {
                 diag.removeEdge(v, w);
             }
 
-            // Then add a connection to the appropriate input vertex
+            // Then add a simple connection to the appropriate input vertex
             auto input_vert = inputs[qubit];
             THREAD_SAFE_PRINT( "Adding edge " << v << " , " << input_vert << std::endl);
-            diag.addEdge(v, input_vert);     
+            if(!diag.connected(v, input_vert)) diag.addEdge(v, input_vert);     
 
             // Remove phase
             if (!diag.phase(v).isZero()) {
@@ -112,9 +112,15 @@ namespace zx {
             const std::unordered_set<size_t>& added_neighbors = entry.second;
 
             for (size_t w : added_neighbors) {
-                // Delete the edge between v and w
-                THREAD_SAFE_PRINT( "Adding edge " << v << " , " << w << std::endl);
-                diag.addEdge(v,w,EdgeType::Hadamard);
+                // Add edge between v and w
+                
+                if(!diag.connected(v, w)) {
+                    THREAD_SAFE_PRINT( "Adding edge " << v << " , " << w << std::endl);
+                    diag.addEdge(v,w,EdgeType::Hadamard);
+                }
+                else {
+                    THREAD_SAFE_PRINT( "Already connected " << v << " , " << w << std::endl);
+                }
             }
         }
         diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(frontier));
@@ -615,7 +621,11 @@ namespace zx {
                     for(auto e : other_extractor->added_edges) {
                         for(auto to : e.second) {
                             THREAD_SAFE_PRINT( "Added edge " << e.first << " , " << to << std::endl);
-                            diag.addEdge(e.first, to);
+                            if(!diag.connected(e.first, to)) diag.addEdge(e.first, to, EdgeType::Hadamard); // FIXME:
+                            else {
+                                THREAD_SAFE_PRINT( "FUCK " << e.first << " , " << to << std::endl);
+                                exit(0);
+                            }
                         }
                         
                     }
@@ -678,20 +688,25 @@ namespace zx {
 
                                 // Remove conflicting entries
                                 auto it = added_edges.find(v);
+                                int removed = 0;
                                 if (it != added_edges.end()) {
-                                    it->second.erase(ftarg); // Remove ftarg from the unordered_set
+                                    removed = it->second.erase(ftarg); // Remove ftarg from the unordered_set
                                     if (it->second.empty())
                                         added_edges.erase(it); // Remove the entry if the unordered_set becomes empty
+                                    
                                 }
-
-                                deleted_edges[v].insert(ftarg); 
-
-                                THREAD_SAFE_PRINT( "Removed edge (" << ftarg << ", " << v << ")" << std::endl);
+                                if(removed == 0) {  // DEL + ADD = NOTHING (Only remove when it was not added already)
+                                    deleted_edges[v].insert(ftarg); 
+                                    THREAD_SAFE_PRINT( "Removed edge (" << ftarg << ", " << v << ")" << std::endl);
+                                }
+                                else {
+                                    THREAD_SAFE_PRINT( "Edge cancelled (" << ftarg << ", " << v << ")" << std::endl);
+                                }
+                                
                             } else {
                                 if (contains(inputs, v)) { // v is an input
                                 // FIXME: This case can not occur?
                                     THREAD_SAFE_PRINT( "Trying to remove edge but v is input " << ftarg << " vs " << v << std::endl);
-                                    exit(0);
                                     auto new_v = diag.insertIdentity(fcont, target_qubit, v);
                                     if (new_v) {
                                         diag.addEdge(ftarg, *new_v, zx::EdgeType::Hadamard);
@@ -702,13 +717,19 @@ namespace zx {
 
                                     // Remove conflicting entries
                                     auto it = deleted_edges.find(v);
+                                    int removed = 0;
                                     if (it != deleted_edges.end()) {
-                                        it->second.erase(ftarg); // Remove ftarg from the unordered_set
+                                        removed = it->second.erase(ftarg); // Remove ftarg from the unordered_set
                                         if (it->second.empty())
                                             deleted_edges.erase(it); // Remove the entry if the unordered_set becomes empty
                                     }
-                                    added_edges[v].insert(ftarg);
-                                    THREAD_SAFE_PRINT( "Added edge (" << ftarg << ", " << v << ")" << std::endl);
+                                    if(removed == 0) { // DEL + ADD = NOTHING (Only add when it was not removed already)
+                                        added_edges[v].insert(ftarg);
+                                        THREAD_SAFE_PRINT( "Added edge (" << ftarg << ", " << v << ")" << std::endl);
+                                    }
+                                    else {
+                                        THREAD_SAFE_PRINT( "Edge cancelled (" << ftarg << ", " << v << ")" << std::endl);
+                                    }
                                 }
                             }
                         }

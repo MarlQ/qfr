@@ -21,7 +21,7 @@
 #include <omp.h>
 #include <optional>
 #include <tuple>
-#define DEBUG true
+#define DEBUG false
 #ifdef DEBUG
 #define THREAD_SAFE_PRINT(value) \
     do { \
