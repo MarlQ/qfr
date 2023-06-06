@@ -21,7 +21,7 @@
 #include <omp.h>
 #include <optional>
 #include <tuple>
-//#define DEBUG true
+#define DEBUG true
 #ifdef DEBUG
 #define THREAD_SAFE_PRINT(value) \
     do { \
@@ -47,7 +47,7 @@ namespace zx {
         std::unordered_map<size_t, int>* claimed_vertices; // Vertices marked by the thread in parallel execution
         
         int extract();
-        int finalizeExtraction(std::map<zx::Qubit, zx::Vertex> other_frontier, std::unordered_set<size_t> claimed_neighbors_other);
+        int finalizeExtraction(std::map<zx::Qubit, zx::Vertex> other_frontier);
         std::vector<size_t> frontierToInputs();
         std::map<zx::Qubit, zx::Vertex> frontier;
         bool parallelize = true;
@@ -79,6 +79,7 @@ namespace zx {
         std::stringstream ts_printstream;
 
         bool get_frontier_neighbors();
+        bool get_frontier_neighbors_parallel_new();
         bool get_frontier_neighbors_parallel(std::vector<zx::Vertex>* frontier_values);
 
         gf2Mat getAdjacencyMatrix(const std::vector<zx::Vertex>& vertices_from, const std::vector<Vertex>& vertices_to);
