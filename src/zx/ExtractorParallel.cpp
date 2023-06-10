@@ -23,7 +23,7 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 #include <omp.h>
-#define DEBUG false
+#define DEBUG true
 
 
 /**
@@ -123,7 +123,7 @@ namespace zx {
                 }
             }
         }
-        diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(frontier));
+        //diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(frontier));
         THREAD_SAFE_PRINT( "Preparation finished." << std::endl);
 
         THREAD_SAFE_PRINT( "Inputs:" << std::endl);
@@ -207,11 +207,7 @@ namespace zx {
         return i;
     }
 
-    int ExtractorParallel::extract() {
-        THREAD_SAFE_PRINT( "Extractor " << omp_get_thread_num() << " started!" << std::endl);
-        initFrontier();
-        
-
+    void ExtractorParallel::extractOutputHadamards() {
         for (auto v: frontier) { // IMPROVE: Iterate over outputs
             auto incident = diag.incidentEdges(v.second);
             for (auto edge: incident) {
@@ -228,6 +224,14 @@ namespace zx {
                 }
             }
         }
+    }
+
+    int ExtractorParallel::extract() {
+        THREAD_SAFE_PRINT( "Extractor " << omp_get_thread_num() << " started!" << std::endl);
+        initFrontier();
+        
+
+        extractOutputHadamards();
 
         int i = 1; // Iteration counter. For debugging only.
 
@@ -481,61 +485,140 @@ namespace zx {
         //begin = std::chrono::steady_clock::now();
         if (!singleOneRowExists) {
             THREAD_SAFE_PRINT( "Ws is 0" << std::endl);
-            if(!parallelize) exit(0);
+            /* if(!parallelize) exit(0);
 
-            
+        
             return false;
-            exit(0);
+            exit(0); */
+
+            if (omp_get_thread_num() == 0) diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test1.json", mapToVector(frontier));
+            else return false;
+            bool yzFound = false;
 
             // Extract YZ-spiders
             for (auto v: frontier_neighbors) {
                 auto v_neighbors = diag.getNeighborVertices(v);
 
+                THREAD_SAFE_PRINT( "Neighbors of :" << v << std::endl);
+                if(DEBUG)printVector(v_neighbors);
+
                 //v_neighbors.erase(std::remove_if(v_neighbors.begin(), v_neighbors.end(), [diag](int x) { return diag.isInput(x); }), v_neighbors.end());
 
-                for (auto w: v_neighbors) {
+                for (auto w: v_neighbors) { // neighbors of neighbors
                     if (contains(inputs, w) || contains(outputs, w)) continue;
                     auto w_neighbors = diag.getNeighborVertices(w);
 
-                    if (w_neighbors.size() == 1) {
+                    THREAD_SAFE_PRINT( "...Neighbors of :" << w << std::endl);
+                    if(DEBUG)printVector(w_neighbors);
+
+                    if (w_neighbors.size() == 1) { // Has no other neighbor
+                        
                         THREAD_SAFE_PRINT( "Vertex with only one neighbor found: " << w << " with phase " << diag.phase(w) << std::endl);
+                        THREAD_SAFE_PRINT( "This is a neighbor of frontier neighbor vert: " << v << std::endl);
                         if (contains(outputs, w)) {
                             THREAD_SAFE_PRINT( "ERROR: vertex is input!" << std::endl);
                         }
 
                         if (diag.phase(v).isZero()) { // Phase-gadget found
                                                       //FIXME: Or PI?
-
-                            size_t    frontier_neighbor;
+                                                      // IMPROVE: Maybe check earlier?
+                            THREAD_SAFE_PRINT( "YZ Found " << v << std::endl);
+                            yzFound = true;
+                            size_t    corresponding_frontier_vertex;
                             zx::Qubit q;
+                            bool vertex_found = false;
 
-                            for (auto z: v_neighbors) {
+                            THREAD_SAFE_PRINT( "Frontier:" << std::endl);
+                            if(DEBUG)printVector(frontier);
+                            THREAD_SAFE_PRINT( "Searching coresponding frontier vert... "<< std::endl);
+                            THREAD_SAFE_PRINT( "Neighborsss of :" << v << std::endl);
+                            if(DEBUG)printVector(v_neighbors);
+                            for (auto z: v_neighbors) { // Get the frontier vertex corresponding to v
+                                THREAD_SAFE_PRINT( "Current " << z << std::endl);
                                 auto it = std::find_if(frontier.begin(), frontier.end(), [z](const auto& p) { return p.second == z; });
                                 if (it != frontier.end()) {
-                                    frontier_neighbor = z;
+                                    corresponding_frontier_vertex = z;
                                     q                 = it->first;
+                                    vertex_found = true;
                                     break;
                                 }
                             }
-                            if (frontier_neighbor) { // Add hadmard - green - hadamard to output ---> green becomes frontier afterwards, then manually resolve hadamard to output
-                                zx::pivot(diag, v, frontier_neighbor);
+                            THREAD_SAFE_PRINT( "Frontier vert is " << corresponding_frontier_vertex << std::endl);
+                            if (vertex_found) { // Add hadmard - green - hadamard to output ---> green becomes frontier afterwards, then manually resolve hadamard to output
+                                
+                                THREAD_SAFE_PRINT( "Sanity 235"  << " == " << diag.isDeleted(235) << std::endl);
+                                if(diag.isDeleted(v)) {
+                                    THREAD_SAFE_PRINT( "Was DELETED "  << v << std::endl);
+                                    diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(frontier));
+                                    exit(0);
+                                }
+
+                                if(diag.isDeleted(corresponding_frontier_vertex)) {
+                                    THREAD_SAFE_PRINT( "Was DELETED "  << corresponding_frontier_vertex << std::endl);
+                                    diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(frontier));
+                                    exit(0);
+                                }
+
+                                THREAD_SAFE_PRINT( "Performing pivot " << v << " and " << corresponding_frontier_vertex << std::endl);
+                                zx::pivot(diag, v, corresponding_frontier_vertex);
+                                THREAD_SAFE_PRINT( "Sanity 235"  << " == " << diag.isDeleted(235) << std::endl);
+
+                                THREAD_SAFE_PRINT( "Deleted " << v << " == " << diag.isDeleted(v) << std::endl);
+                                THREAD_SAFE_PRINT( "Deleted " << frontier[q] << " == " << diag.isDeleted(frontier[q]) << std::endl);
 
                                 // Remove YZ-spider
-                                THREAD_SAFE_PRINT( "Old spider " << frontier[q] << std::endl);
+                                THREAD_SAFE_PRINT( "Old spider " << frontier[q] << " AHH " << corresponding_frontier_vertex << std::endl);
                                 if (frontier[q] != v) {
                                     THREAD_SAFE_PRINT( "Old spider " << frontier[q] << " != " << v << std::endl);
                                     //exit(0);
                                 }
-                                frontier[q] = w;
+                                // frontier[q] = w;
 
                                 //THREAD_SAFE_PRINT( "Removing YZ-spider " << v << std::endl);
-                                THREAD_SAFE_PRINT( "New frontier spider is " << w << " on Qubit" << q << std::endl);
+                                
+
+                                THREAD_SAFE_PRINT( "Frontier:" << std::endl);
+                                if(DEBUG)printVector(frontier);
+
+                                std::vector<size_t> test;
+                                for (size_t i = 0; i < outputs.size(); ++i) {
+                                    auto u = diag.getNeighborVertices(outputs[i]);
+                                    THREAD_SAFE_PRINT( "Output neighbors of " << i << std::endl);
+                                    if(DEBUG)printVector(u);
+                                }
+                                frontier[q] = diag.getNeighborVertices(outputs[q])[0]; // FIXME:
+                                if(diag.isDeleted(w)) {
+                                    THREAD_SAFE_PRINT( "...but it was deleted!?" << std::endl);
+                                }
+
+                                THREAD_SAFE_PRINT( "New frontier spider is " << frontier[q] << " on Qubit" << q << std::endl);
+
+                                THREAD_SAFE_PRINT( "New frontier?:" << std::endl);
+                                if(DEBUG)printVector(frontier);
+
+                                THREAD_SAFE_PRINT( "Frontier neighbors:" << std::endl);
+                                if(DEBUG)printVector(frontier_neighbors);
+
+
+                            }
+                            else {
+                                THREAD_SAFE_PRINT( "NO FRONTIER NEIGHBOR?" << std::endl);
                             }
                         }
                     }
                 }
             }
-            return true;
+            if (omp_get_thread_num() == 0) diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(frontier));
+            if(yzFound) {
+                THREAD_SAFE_PRINT( "All YZ-Spiders eliminated " << std::endl);
+                extractOutputHadamards();
+                extractRZ_CZ(); // FIXME: Hadamards to outputs?
+                return extractCNOT();
+            }
+            else {
+                THREAD_SAFE_PRINT( "No YZ-Spider found " << std::endl);
+                return false;
+            }
         }
         //end = std::chrono::steady_clock::now();
 
@@ -1473,8 +1556,8 @@ namespace zx {
         //zxDiag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json");
 
         std::cout << "Simplifying" << std::endl;
-        zx::interiorCliffordSimp(zxDiag);
-        //zx::fullReduce(zxDiag);
+        //zx::interiorCliffordSimp(zxDiag);
+        zx::fullReduce(zxDiag);
         auto end = std::chrono::steady_clock::now();
         measurement.addMeasurement("simplification", begin, end);
 
@@ -1510,7 +1593,7 @@ namespace zx {
                     if(DEBUG) std::cout << "Extractor 1 finished" << std::endl;
                 }
             }
-            zxDiag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test1.json", mapToVector(extractor1.frontier));
+            //zxDiag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test1.json", mapToVector(extractor1.frontier));
             //zxDiag_reversed.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(extractor1.frontier));
 
             // Extract rest

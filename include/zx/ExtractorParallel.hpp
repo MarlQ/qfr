@@ -21,7 +21,7 @@
 #include <omp.h>
 #include <optional>
 #include <tuple>
-#define DEBUG false
+#define DEBUG true
 #ifdef DEBUG
 #define THREAD_SAFE_PRINT(value) \
     do { \
@@ -74,6 +74,8 @@ namespace zx {
         bool extractCNOT();
 
         bool processFrontier();
+
+        void extractOutputHadamards();
 
 
         std::stringstream ts_printstream;
