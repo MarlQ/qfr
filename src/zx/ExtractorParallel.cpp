@@ -1,6 +1,7 @@
 #define NOMINMAX
 #include "zx/ExtractorParallel.hpp"
 
+#include "algorithms/RandomCliffordCircuit.hpp"
 #include "CircuitOptimizer.hpp"
 #include "Definitions.hpp"
 #include "QuantumComputation.hpp"
@@ -23,7 +24,7 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 #include <omp.h>
-#define DEBUG true
+#define DEBUG false
 
 
 /**
@@ -491,8 +492,7 @@ namespace zx {
             return false;
             exit(0); */
 
-            if (omp_get_thread_num() == 0) diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test1.json", mapToVector(frontier));
-            else return false;
+            return false;
             bool yzFound = false;
 
             // Extract YZ-spiders
@@ -608,7 +608,7 @@ namespace zx {
                     }
                 }
             }
-            if (omp_get_thread_num() == 0) diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(frontier));
+            //if (omp_get_thread_num() == 0) diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(frontier));
             if(yzFound) {
                 THREAD_SAFE_PRINT( "All YZ-Spiders eliminated " << std::endl);
                 extractOutputHadamards();
@@ -699,16 +699,12 @@ namespace zx {
                 }
                 
                 if(conflict) {
-                    
+                    // IMPROVE: Copy, implement later
                     // Implement changes
                     for(auto e : other_extractor->added_edges) {
                         for(auto to : e.second) {
                             THREAD_SAFE_PRINT( "Added edge " << e.first << " , " << to << std::endl);
-                            if(!diag.connected(e.first, to)) diag.addEdge(e.first, to, EdgeType::Hadamard); // FIXME:
-                            else {
-                                THREAD_SAFE_PRINT( "FUCK " << e.first << " , " << to << std::endl);
-                                exit(0);
-                            }
+                            diag.addEdge(e.first, to, EdgeType::Hadamard);
                         }
                         
                     }
@@ -728,21 +724,6 @@ namespace zx {
                     // TODO: No: Add own changes to buffer array, so that the other thread is not blocked
                     THREAD_SAFE_PRINT( "No conflict!" << std::endl);
                     for (auto r: rowOperations_indices) {
-                        /* auto r_1 = r.first;
-                        auto r_2 = r.second;
-
-                        if(parallelize) { // Since we previously may have removed values from the frontier, we have to find the true entries
-                            // IMPROVE: CHeck whether this is necessary first
-                            auto frontier_value_1 = frontier_values[r_1];
-                            auto frontier_value_2 = frontier_values[r_2];
-
-                            for (auto it = frontier.begin(); it != frontier.end(); ++it) {
-                                if (it->second == frontier_value_1) r_1 = it->first;
-                                else if(it->second == frontier_value_2) r_2 = it->first;
-                            }
-                            
-                        } */
-
 
                         // From row operation: r.second = r.second + r.first
 
@@ -823,70 +804,72 @@ namespace zx {
             
             if(conflict) {
                 THREAD_SAFE_PRINT( "Re-doing CNOT " << std::endl);
+                failedCnots++;
                 return extractCNOT();
             } else return true;
         }
         
 
         if(!parallelize) { // FIXME: Duplicate code
-        // Extract CNOTs
-        for (auto r: rowOperations_indices) {
-            /* auto r_1 = r.first;
-            auto r_2 = r.second;
+            // Extract CNOTs
+            for (auto r: rowOperations_indices) {
+                /* auto r_1 = r.first;
+                auto r_2 = r.second;
 
-            if(parallelize) { // Since we previously may have removed values from the frontier, we have to find the true entries
-                // IMPROVE: CHeck whether this is necessary first
-                auto frontier_value_1 = frontier_values[r_1];
-                auto frontier_value_2 = frontier_values[r_2];
+                if(parallelize) { // Since we previously may have removed values from the frontier, we have to find the true entries
+                    // IMPROVE: CHeck whether this is necessary first
+                    auto frontier_value_1 = frontier_values[r_1];
+                    auto frontier_value_2 = frontier_values[r_2];
 
-                for (auto it = frontier.begin(); it != frontier.end(); ++it) {
-                    if (it->second == frontier_value_1) r_1 = it->first;
-                    else if(it->second == frontier_value_2) r_2 = it->first;
-                }
-                
-            } */
+                    for (auto it = frontier.begin(); it != frontier.end(); ++it) {
+                        if (it->second == frontier_value_1) r_1 = it->first;
+                        else if(it->second == frontier_value_2) r_2 = it->first;
+                    }
+                    
+                } */
 
 
-            // From row operation: r.second = r.second + r.first
+                // From row operation: r.second = r.second + r.first
 
-            auto it            = frontier.begin();
-            auto control_entry = r.second;
-            auto target_entry  = r.first;
+                auto it            = frontier.begin();
+                auto control_entry = r.second;
+                auto target_entry  = r.first;
 
-            auto control_qubit = control_entry.first;
-            auto target_qubit  = target_entry.first;
-            THREAD_SAFE_PRINT( " Entries " << control_qubit << "|" << control_entry.second << " , " << target_qubit << "|" << target_entry.second << std::endl);
+                auto control_qubit = control_entry.first;
+                auto target_qubit  = target_entry.first;
+                THREAD_SAFE_PRINT( " Entries " << control_qubit << "|" << control_entry.second << " , " << target_qubit << "|" << target_entry.second << std::endl);
 
-            circuit.x(target_qubit, dd::Control{(dd::Qubit)control_qubit});
-            THREAD_SAFE_PRINT( "Added CNOT (T:" << target_qubit << ", C:" << control_qubit << ")" << std::endl);
+                circuit.x(target_qubit, dd::Control{(dd::Qubit)control_qubit});
+                THREAD_SAFE_PRINT( "Added CNOT (T:" << target_qubit << ", C:" << control_qubit << ")" << std::endl);
 
-            auto ftarg = control_entry.second;
-            auto fcont = target_entry.second;
+                auto ftarg = control_entry.second;
+                auto fcont = target_entry.second;
 
-            // Update diag based on row operation
-            for (auto v: diag.getNeighborVertices(fcont)) {
-                if (contains(outputs, v)) {
-                    continue;
-                }
+                // Update diag based on row operation
+                for (auto v: diag.getNeighborVertices(fcont)) {
+                    if (contains(outputs, v)) {
+                        continue;
+                    }
 
-                if (diag.connected(ftarg, v)) {
-                    diag.removeEdge(ftarg, v);
-                    THREAD_SAFE_PRINT( "Removed edge (" << ftarg << ", " << v << ")" << std::endl);
-                } else {
-                    if (contains(inputs, v)) { // v is an input
-                        THREAD_SAFE_PRINT( "Trying to remove edge but v is input " << ftarg << " vs " << v << std::endl);
-                        auto new_v = diag.insertIdentity(fcont, target_qubit, v);
-                        if (new_v) {
-                            diag.addEdge(ftarg, *new_v, zx::EdgeType::Hadamard);
-                            THREAD_SAFE_PRINT( "Added edge (" << ftarg << ", " << *new_v << ")" << std::endl);
-                        }
+                    if (diag.connected(ftarg, v)) {
+                        diag.removeEdge(ftarg, v);
+                        THREAD_SAFE_PRINT( "Removed edge (" << ftarg << ", " << v << ")" << std::endl);
                     } else {
-                        diag.addEdge(ftarg, v, zx::EdgeType::Hadamard);
-                        THREAD_SAFE_PRINT( "Added edge (" << ftarg << ", " << v << ")" << std::endl);
+                        if (contains(inputs, v)) { // v is an input
+                            THREAD_SAFE_PRINT( "Trying to remove edge but v is input " << ftarg << " vs " << v << std::endl);
+                            auto new_v = diag.insertIdentity(fcont, target_qubit, v);
+                            if (new_v) {
+                                diag.addEdge(ftarg, *new_v, zx::EdgeType::Hadamard);
+                                THREAD_SAFE_PRINT( "Added edge (" << ftarg << ", " << *new_v << ")" << std::endl);
+                            }
+                        } else {
+                            diag.addEdge(ftarg, v, zx::EdgeType::Hadamard);
+                            THREAD_SAFE_PRINT( "Added edge (" << ftarg << ", " << v << ")" << std::endl);
+                        }
                     }
                 }
             }
-        }}
+        }
         //end = std::chrono::steady_clock::now();
         //measurement.addMeasurement("extract:extractCNOT:CNOTFromOperations", begin, end);
 
@@ -1535,34 +1518,46 @@ namespace zx {
 
     
 
-    void testParallelExtraction(std::string circuitName, std::string measurementGroup, bool parallelization) {
+    void testParallelExtraction(std::string circuitName, std::string measurementGroup, bool parallelization, bool random, int randomQubits) {
         std::cout << "Extraction testing" << std::endl;
         Measurement measurement;
 
         if (DEBUG) std::cout << "Setting up...\n";
-        qc::QuantumComputation qc{};
-        std::cout << "Circuit " << circuitName << ":" << std::endl;
-        qc.import("H:/Uni/Masterarbeit/qcec/" + circuitName);
+        std::unique_ptr<qc::QuantumComputation> qc;
+        if(random) {
+            std::cout << "Generating random circuit with " << randomQubits << " qubits." << std::endl;
+            const dd::QubitCount nq = randomQubits;
 
-        qc.dump("H:/Uni/Masterarbeit/pyzx/thesis/original.qasm");
+            auto dd = std::make_unique<dd::Package<>>(nq);
+            qc = std::make_unique<qc::QuantumComputation>(qc::RandomCliffordCircuit(nq, nq * nq, 12345));
+        }
+        else {
+            qc = std::make_unique<qc::QuantumComputation>();
+            std::cout << "Circuit " << circuitName << ":" << std::endl;
+            qc->import("H:/Uni/Masterarbeit/qcec/" + circuitName);
+        }
+        
+
+        qc->dump("H:/Uni/Masterarbeit/pyzx/thesis/original.qasm");
 
         if (DEBUG) std::cout << "Circuit to extract:" << std::endl;
         //if (DEBUG) std::cout << qc << std::endl;
         auto begin = std::chrono::steady_clock::now();
 
-        zx::ZXDiagram zxDiag = zx::FunctionalityConstruction::buildFunctionality(&qc);
+        zx::ZXDiagram zxDiag = zx::FunctionalityConstruction::buildFunctionality(qc.get());
 
         zxDiag.toGraphlike();
         //zxDiag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json");
 
         std::cout << "Simplifying" << std::endl;
         //zx::interiorCliffordSimp(zxDiag);
-        zx::fullReduce(zxDiag);
+        //zx::fullReduce(zxDiag);
         auto end = std::chrono::steady_clock::now();
         measurement.addMeasurement("simplification", begin, end);
 
         std::cout << "Extracting" << std::endl;
         int iterations = 0;
+        int parallel_iterations = 0;
         if(parallelization) {
             std::cout << "Starting parallel extraction" << std::endl;
 
@@ -1604,19 +1599,16 @@ namespace zx {
             /* extractor1.deleted_edges = extractor2.deleted_edges;
             extractor1.added_edges = extractor2.added_edges; */
             int iterations_seq = extractor1.finalizeExtraction(extractor2.frontier);
-            qc_extracted_2.combine(qc_extracted);
-
-            end = std::chrono::steady_clock::now(); // End measurement
-
-            qc_extracted.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted2.qasm");
 
             // Combine diagrams
             THREAD_SAFE_PRINT( "Combining diagrams" << std::endl);
-            
+            qc_extracted_2.combine(qc_extracted);
 
-            
+            end = std::chrono::steady_clock::now(); // End measurement
             measurement.addMeasurement("extract", begin, end);
-            
+
+            qc_extracted.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted2.qasm");
+
             std::cout << "Finished Circuit" << std::endl;
             //std::cout << qc_extracted_2 << std::endl;
 
@@ -1625,6 +1617,7 @@ namespace zx {
             std::cout << "Parallel iterations: " << iterations_1 << "||" << iterations_2 << std::endl;
 
             iterations = std::max(iterations_1, iterations_2) + iterations_seq;
+            parallel_iterations = std::min(iterations_1, iterations_2);
 
             float degree_of_parallelism = std::min(iterations_1, iterations_2) / iterations;
         }
@@ -1653,6 +1646,6 @@ namespace zx {
        
         
 
-        measurement.printMeasurements(measurementGroup, circuitName, "H:/Uni/Masterarbeit/measurements_new.csv");
+        measurement.printMeasurements(measurementGroup, circuitName, parallel_iterations, iterations, "H:/Uni/Masterarbeit/measurements_new.csv");
     }
 } // namespace zx

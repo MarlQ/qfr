@@ -27,7 +27,7 @@ void Measurement::addMeasurement(std::string name, std::chrono::steady_clock::ti
     }
 }
 
-void Measurement::printMeasurements(std::string group, std::string circuit, std::string filename) {
+void Measurement::printMeasurements(std::string group, std::string circuit, int parallel_iterations, int iterations, std::string filename) {
     for (auto t: times) {
         std::cout << t.first << " = " << t.second / 1000000.0 << "[ms]" << std::endl;
     }
@@ -42,6 +42,6 @@ void Measurement::printMeasurements(std::string group, std::string circuit, std:
     for (const auto& [key, value]: times) {
         file << "," << value / 1000000.0;
     }
-    file << std::endl;
+    file << parallel_iterations << "," << iterations << std::endl;
     file.close();
 }

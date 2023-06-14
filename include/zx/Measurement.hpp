@@ -20,6 +20,6 @@ public:
 
     void addMeasurement(std::string name, std::chrono::steady_clock::time_point begin, std::chrono::steady_clock::time_point end);
 
-    void printMeasurements(std::string group, std::string circuit, std::string filename="H:/Uni/Masterarbeit/measurements.csv");
+    void printMeasurements(std::string group, std::string circuit, int parallel_iterations, int iterations, std::string filename="H:/Uni/Masterarbeit/measurements.csv");
 };
 

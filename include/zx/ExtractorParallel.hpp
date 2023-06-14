@@ -21,7 +21,7 @@
 #include <omp.h>
 #include <optional>
 #include <tuple>
-#define DEBUG true
+#define DEBUG false
 #ifdef DEBUG
 #define THREAD_SAFE_PRINT(value) \
     do { \
@@ -55,6 +55,8 @@ namespace zx {
         std::unordered_map<size_t, std::unordered_set<size_t>> deleted_edges;
         std::unordered_map<size_t, std::unordered_set<size_t>> added_edges;
         std::unordered_set<size_t> claimed_neighbors;
+
+        int failedCnots = 0;
 
     private:
         qc::QuantumComputation& circuit;
@@ -187,6 +189,6 @@ namespace zx {
 
     };
     
-    void testParallelExtraction(std::string circuitName="vbe_adder_3.qasm", std::string measurementGroup="1", bool parallelization=false);
+    void testParallelExtraction(std::string circuitName="vbe_adder_3.qasm", std::string measurementGroup="1", bool parallelization=false, bool random=false, int randomQubits=0);
 
 } // namespace zx

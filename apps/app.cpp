@@ -5,6 +5,7 @@
 
 #include "QuantumComputation.hpp"
 #include "zx/ExtractorParallel.hpp"
+#include "algorithms/RandomCliffordCircuit.hpp"
 
 #include <algorithm>
 #include <functional>
@@ -31,7 +32,11 @@ int main(int argc, char** argv) {
     if(argc > 3) {
         bool parallelization = strcmp(argv[3], "true") == 0 || strcmp(argv[3], "1") == 0;
         std::cout << "Parallelization: " << parallelization << " | " << argv[3] << std::endl;
-        zx::testParallelExtraction(argv[1], argv[2], parallelization);
+
+        if(argc > 4) {
+            zx::testParallelExtraction(argv[1], argv[2], parallelization, true, std::stoi(argv[4]));
+        }
+        else zx::testParallelExtraction(argv[1], argv[2], parallelization);
     }
     else zx::testParallelExtraction();
     return 0;
