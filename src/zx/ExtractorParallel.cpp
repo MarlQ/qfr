@@ -968,8 +968,8 @@ namespace zx {
                     THREAD_SAFE_PRINT( "Deleting entry " << chain[i] << std::endl);
                     #pragma omp critical(cnot) 
                     {
-                        deleted_edges[chain[i]].clear();
-                        added_edges[chain[i]].clear();
+                        deleted_edges.erase(chain[i]);
+                        added_edges.erase(chain[i]);
                     }
                 }
             }
@@ -988,8 +988,8 @@ namespace zx {
                 THREAD_SAFE_PRINT( "Deleting entry " << last_in_chain << std::endl);
                 #pragma omp critical(cnot) 
                 {
-                    deleted_edges[last_in_chain].clear();
-                    added_edges[last_in_chain].clear();
+                    deleted_edges.erase(last_in_chain);
+                    added_edges.erase(last_in_chain);
                 }
             }
 
