@@ -42,6 +42,7 @@ void Measurement::printMeasurements(std::string group, std::string circuit, int 
     for (const auto& [key, value]: times) {
         file << "," << value / 1000000.0;
     }
-    file << parallel_iterations << "," << iterations << std::endl;
+    file << "," << parallel_iterations << "," << iterations << std::endl;
+    std::cout << "Wrote to file " << filename <<std::endl;
     file.close();
 }

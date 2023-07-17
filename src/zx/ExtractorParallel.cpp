@@ -266,7 +266,7 @@ namespace zx {
             int interrupted_cnot = 2;
             
             while(interrupted_cnot == 2) { // 0 = success, 1 = interrupted, 2 = re-do
-                interrupted_cnot = !extractCNOT();
+                interrupted_cnot = extractCNOT();
             }
             //b = omp_get_wtime();
             //cnot_time += (b - a) * 1000.0;
@@ -1575,7 +1575,7 @@ namespace zx {
         //zxDiag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json");
 
         std::cout << "Simplifying" << std::endl;
-        //zx::interiorCliffordSimp(zxDiag);
+        zx::interiorCliffordSimp(zxDiag);
         //zx::fullReduce(zxDiag);
         auto end = std::chrono::steady_clock::now();
         measurement.addMeasurement("simplification", begin, end);
