@@ -36,6 +36,14 @@
 #endif
 
 
+#define THREAD_SAFE_PRINT_2(value) \
+    do { \
+            int tid = omp_get_thread_num(); \
+            std::ofstream ofs("H:/Uni/Masterarbeit/pyzx/thesis/thread_" + std::to_string(tid) + "_measurements.txt", std::ios_base::app); \
+            ofs << value; \
+    } while(0)
+
+
 namespace zx {
     
 
@@ -57,6 +65,10 @@ namespace zx {
         std::unordered_set<size_t> claimed_neighbors;
 
         int failedCnots = 0;
+        double cnot_time = 0;
+        double rz_cz = 0;
+        double processFrontierTime = 0;
+        double parallel_time = 0;
 
     private:
         qc::QuantumComputation& circuit;
@@ -73,7 +85,7 @@ namespace zx {
 
         void extractRZ_CZ();
 
-        bool extractCNOT();
+        int extractCNOT(); // 0 = success, 1 = interrupted, 2 = re-do
 
         bool processFrontier();
 

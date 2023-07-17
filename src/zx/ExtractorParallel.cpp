@@ -238,7 +238,10 @@ namespace zx {
 
         while (frontier.size() > 0) {
             ////auto //begin = std::chrono::steady_clock::now();
+            //auto a = omp_get_wtime();
             extractRZ_CZ();
+            //auto b = omp_get_wtime();
+            //rz_cz += (b - a) * 1000.0;
             //auto end = std::chrono::steady_clock::now();
             //measurement.addMeasurement("extract:extractRZ_CZ", begin, end);
 
@@ -252,30 +255,50 @@ namespace zx {
             auto neighbors = diag.getNeighborVertices(v.second); //FIXME: Not necessary?
             THREAD_SAFE_PRINT( "neighbors of " << v.second << " :" << std::endl);
             if(DEBUG)printVector(neighbors);
-        } */
+        } */ 
 
 
             
             
 
             //begin = std::chrono::steady_clock::now();
-            bool interrupted_cnot = !extractCNOT();
+            //a = omp_get_wtime();
+            int interrupted_cnot = 2;
+            
+            while(interrupted_cnot == 2) { // 0 = success, 1 = interrupted, 2 = re-do
+                interrupted_cnot = !extractCNOT();
+            }
+            //b = omp_get_wtime();
+            //cnot_time += (b - a) * 1000.0;
             //end = std::chrono::steady_clock::now();
             //measurement.addMeasurement("extract:extractCNOT", begin, end);
 
             //begin = std::chrono::steady_clock::now();
+            //a = omp_get_wtime();
             bool interrupted_processing = !processFrontier();
+            //b = omp_get_wtime();
+            //processFrontierTime += (b - a) * 1000.0;
             //end = std::chrono::steady_clock::now();
             //measurement.addMeasurement("extract:processFrontier", begin, end);
             if(DEBUG) THREAD_SAFE_PRINT( "Iteration " << i << " thread " << omp_get_thread_num() << std::endl);
             i++;
-            if(/* interrupted_cnot ||  */interrupted_processing) {
+            if( interrupted_cnot == 1 ||  interrupted_processing) {
                 extractRZ_CZ();
                 if(DEBUG) THREAD_SAFE_PRINT( "Thread " << thread_num << " was interrupted! ------------------------------------------------------------------------" << std::endl);
+/*                 THREAD_SAFE_PRINT_2("rz_cz " << rz_cz << std::endl);
+                THREAD_SAFE_PRINT_2("cnot_time " << cnot_time << std::endl);
+                THREAD_SAFE_PRINT_2("processFrontierTime " << processFrontierTime << std::endl);
+                THREAD_SAFE_PRINT_2("parallel_time " << parallel_time << std::endl);
+                THREAD_SAFE_PRINT_2("------------------------------------------" << std::endl); */
                 return i;
             }
             
         };
+/*         THREAD_SAFE_PRINT_2("rz_cz " << rz_cz << std::endl);
+        THREAD_SAFE_PRINT_2("cnot_time " << cnot_time << std::endl);
+        THREAD_SAFE_PRINT_2("processFrontierTime " << processFrontierTime << std::endl);
+        THREAD_SAFE_PRINT_2("parallel_time " << parallel_time << std::endl);
+        THREAD_SAFE_PRINT_2("------------------------------------------" << std::endl); */
 
         THREAD_SAFE_PRINT( "Finished extraction. Reversing circuit and finding swaps..." << std::endl);
 
@@ -392,7 +415,7 @@ namespace zx {
         //measurement.addMeasurement("extract:extractRZ_CZ:CZGates", begin, end);
     }
 
-    bool ExtractorParallel::extractCNOT() {
+    int ExtractorParallel::extractCNOT() {
 
         THREAD_SAFE_PRINT( "Is CNOT extraction necessary?" << std::endl);
 
@@ -406,7 +429,7 @@ namespace zx {
         bool cnot_necessary = parallelize ? get_frontier_neighbors_parallel(&frontier_values)  : get_frontier_neighbors();
         if(!cnot_necessary) {
             THREAD_SAFE_PRINT( "No need for CNOT extraction. " << std::endl);
-            return true;
+            return 0;
         }
 
         //auto end = std::chrono::steady_clock::now();
@@ -420,7 +443,7 @@ namespace zx {
         
 
         //frontier_neighbors = parallelize ? get_frontier_neighbors_parallel(&frontier_values) : get_frontier_neighbors();
-        if(frontier_neighbors.size() <= 0) return false;
+        if(frontier_neighbors.size() <= 0) return 1;
 
         THREAD_SAFE_PRINT( "Frontier neighbors:" << std::endl);
         if(DEBUG)printVector(frontier_neighbors);
@@ -492,7 +515,7 @@ namespace zx {
             return false;
             exit(0); */
 
-            return false;
+            return 1;
             bool yzFound = false;
 
             // Extract YZ-spiders
@@ -613,11 +636,11 @@ namespace zx {
                 THREAD_SAFE_PRINT( "All YZ-Spiders eliminated " << std::endl);
                 extractOutputHadamards();
                 extractRZ_CZ(); // FIXME: Hadamards to outputs?
-                return extractCNOT();
+                return extractCNOT(); // FIXME:
             }
             else {
                 THREAD_SAFE_PRINT( "No YZ-Spider found " << std::endl);
-                return false;
+                return 1;
             }
         }
         //end = std::chrono::steady_clock::now();
@@ -671,6 +694,7 @@ namespace zx {
             std::unordered_map<size_t, std::unordered_set<size_t>> changes_deleted_edges;
             std::unordered_map<size_t, std::unordered_set<size_t>> changes_added_edges;
 
+            //auto a = omp_get_wtime();
             #pragma omp critical(cnot) 
             {
                 for (auto r: rowOperations_indices) {
@@ -697,7 +721,7 @@ namespace zx {
                         break;
                     }
                 }
-                
+
                 if(conflict) {
                     // IMPROVE: Copy, implement later
                     // Implement changes
@@ -706,14 +730,14 @@ namespace zx {
                             THREAD_SAFE_PRINT( "Added edge " << e.first << " , " << to << std::endl);
                             diag.addEdge(e.first, to, EdgeType::Hadamard);
                         }
-                        
+
                     }
                     for(auto e : other_extractor->deleted_edges) {
                         for(auto to : e.second) {
                             THREAD_SAFE_PRINT( "Removed edge " << e.first << " , " << to << std::endl);
                             diag.removeEdge(e.first, to);
                         }
-                        
+
                     }
 
                     // Delete changes from array
@@ -721,7 +745,7 @@ namespace zx {
                     other_extractor->deleted_edges.clear();
                 }
                 else {
-                    // TODO: No: Add own changes to buffer array, so that the other thread is not blocked
+                    // IMPROVE: No: Add own changes to buffer array, so that the other thread is not blocked
                     THREAD_SAFE_PRINT( "No conflict!" << std::endl);
                     for (auto r: rowOperations_indices) {
 
@@ -800,13 +824,14 @@ namespace zx {
                     }
                 }
             } // END OF CRITICAL REGION
-
+            //auto c = omp_get_wtime();
+            //parallel_time += (c - a) * 1000.0;
             
             if(conflict) {
                 THREAD_SAFE_PRINT( "Re-doing CNOT " << std::endl);
                 failedCnots++;
-                return extractCNOT();
-            } else return true;
+                return 2;
+            } else return 0;
         }
         
 
@@ -873,7 +898,7 @@ namespace zx {
         //end = std::chrono::steady_clock::now();
         //measurement.addMeasurement("extract:extractCNOT:CNOTFromOperations", begin, end);
 
-        return true;
+        return 0;
     }
 
     bool ExtractorParallel::processFrontier() {
