@@ -360,7 +360,6 @@ namespace zx {
         //measurement.addMeasurement("extract:cancelCNOTs", begin, end);
         return iteration;
     }
-    }
 
     void ExtractorParallel::initFrontier() {
         THREAD_SAFE_PRINT( "Initializing frontier" << std::endl);
