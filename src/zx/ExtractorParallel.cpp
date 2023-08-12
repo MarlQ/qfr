@@ -394,7 +394,8 @@ namespace zx {
         //measurement.addMeasurement("extract:extractRZ_CZ:PhaseGates", begin, end);
 
         //begin = std::chrono::steady_clock::now();
-
+        std::vector<std::pair<zx::Vertex, zx::Vertex>> edges_to_remove;
+        std::set<zx::Vertex> handled_vertices;
         // Extract CZ
         for (auto v: frontier) { // IMPROVE: Can this be within the same for loop as the prior?
             for (zx::Edge e: diag.incidentEdges(v.second)) {
@@ -402,14 +403,21 @@ namespace zx {
                 auto it = std::find_if(frontier.begin(), frontier.end(), [w](const auto& p) { return p.second == w; });
                 if (it != frontier.end()) {
                     dd::Qubit qw = it->first;
-                    THREAD_SAFE_PRINT( "Adding CZ gate at " << v.first << "/" << it->first << std::endl);
-
-                    circuit.z(v.first, dd::Control{qw});
-
+                    
                     // Remove edge between v and w
-                    diag.removeEdge(v.second, w);
+                    if(handled_vertices.count(w) == 0) {
+                        THREAD_SAFE_PRINT( "Adding CZ gate at " << v.first << "/" << it->first << std::endl);
+                        circuit.z(v.first, dd::Control{qw});
+                        edges_to_remove.push_back({v.second, w});
+                    }   
                 }
             }
+            handled_vertices.emplace(v.second);
+        }
+
+        // Remove edge between v and w
+        for (const auto& edge : edges_to_remove) {
+            diag.removeEdge(edge.first, edge.second);
         }
         //end = std::chrono::steady_clock::now();
         //measurement.addMeasurement("extract:extractRZ_CZ:CZGates", begin, end);
