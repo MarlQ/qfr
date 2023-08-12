@@ -234,7 +234,7 @@ namespace zx {
 
         extractOutputHadamards();
 
-        int i = 1; // Iteration counter. For debugging only.
+        iteration = 1; // Iteration counter. For debugging only.
 
         while (frontier.size() > 0) {
             ////auto //begin = std::chrono::steady_clock::now();
@@ -245,7 +245,7 @@ namespace zx {
             //auto end = std::chrono::steady_clock::now();
             //measurement.addMeasurement("extract:extractRZ_CZ", begin, end);
 
-
+            //extractRZ_CZ();
 /* 
             auto verts = diag.getVertices();
         std::vector<zx::Vertex> temp;
@@ -280,25 +280,22 @@ namespace zx {
             //processFrontierTime += (b - a) * 1000.0;
             //end = std::chrono::steady_clock::now();
             //measurement.addMeasurement("extract:processFrontier", begin, end);
-            if(DEBUG) THREAD_SAFE_PRINT( "Iteration " << i << " thread " << omp_get_thread_num() << std::endl);
-            i++;
-            if( interrupted_cnot == 1 ||  interrupted_processing) {
+            if(DEBUG) THREAD_SAFE_PRINT( "Iteration " << iteration << " thread " << omp_get_thread_num() << std::endl);
+            
+            iteration++;
+            if( parallelize && (interrupted_cnot == 1 ||  interrupted_processing || other_extractor->isFinished())) {
                 extractRZ_CZ();
                 if(DEBUG) THREAD_SAFE_PRINT( "Thread " << thread_num << " was interrupted! ------------------------------------------------------------------------" << std::endl);
-/*                 THREAD_SAFE_PRINT_2("rz_cz " << rz_cz << std::endl);
-                THREAD_SAFE_PRINT_2("cnot_time " << cnot_time << std::endl);
-                THREAD_SAFE_PRINT_2("processFrontierTime " << processFrontierTime << std::endl);
-                THREAD_SAFE_PRINT_2("parallel_time " << parallel_time << std::endl);
-                THREAD_SAFE_PRINT_2("------------------------------------------" << std::endl); */
-                return i;
+
+                finished.store(true, std::memory_order::memory_order_relaxed);
+                return iteration;
             }
             
         };
-/*         THREAD_SAFE_PRINT_2("rz_cz " << rz_cz << std::endl);
-        THREAD_SAFE_PRINT_2("cnot_time " << cnot_time << std::endl);
-        THREAD_SAFE_PRINT_2("processFrontierTime " << processFrontierTime << std::endl);
-        THREAD_SAFE_PRINT_2("parallel_time " << parallel_time << std::endl);
-        THREAD_SAFE_PRINT_2("------------------------------------------" << std::endl); */
+        if(parallelize) {
+            std::cout << "THIS SHOULD NEVER HAPPEN " << std::endl;
+            exit(0);  
+        }
 
         THREAD_SAFE_PRINT( "Finished extraction. Reversing circuit and finding swaps..." << std::endl);
 
@@ -361,7 +358,8 @@ namespace zx {
         qc::CircuitOptimizer::cancelCNOTs(circuit);
         //auto end = std::chrono::steady_clock::now();
         //measurement.addMeasurement("extract:cancelCNOTs", begin, end);
-        return i;
+        return iteration;
+    }
     }
 
     void ExtractorParallel::initFrontier() {

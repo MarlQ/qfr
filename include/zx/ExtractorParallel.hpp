@@ -21,6 +21,7 @@
 #include <omp.h>
 #include <optional>
 #include <tuple>
+#include <atomic>
 #define DEBUG false
 #ifdef DEBUG
 #define THREAD_SAFE_PRINT(value) \
@@ -70,6 +71,12 @@ namespace zx {
         double processFrontierTime = 0;
         double parallel_time = 0;
 
+        int iteration = 0;
+
+        bool isFinished() const {
+            return finished.load(std::memory_order::memory_order_relaxed);
+        }   
+
     private:
         qc::QuantumComputation& circuit;
         ZXDiagram& diag;
@@ -77,6 +84,7 @@ namespace zx {
         std::vector<size_t> inputs;
         std::vector<size_t> outputs;
         int thread_num;
+        std::atomic<bool> finished{false};
         
         
         std::vector<size_t> frontier_neighbors;
