@@ -28,17 +28,94 @@ void show_usage(const std::string& name) {
 
 int main(int argc, char** argv) {
     std::cout << "Starting App" << std::endl;
-    
-    if(argc > 3) {
+
+    std::vector<std::string> circuits = {
+        "circuits\\pyzx\\barenco_tof_5.qasm",
+        "circuits\\pyzx\\barenco_tof_10.qasm",
+        "circuits\\pyzx\\gf2^10_mult.qasm",
+        "circuits\\pyzx\\gf2^16_mult.qasm",
+        "circuits\\pyzx\\gf2^32_mult.qasm",
+        "circuits\\pyzx\\ham15-low.qasm",
+        "circuits\\pyzx\\ham15-med.qasm",
+        "circuits\\pyzx\\ham15-high.qasm",
+        "circuits\\pyzx\\hwb6.qasm",
+        "circuits\\pyzx\\hwb8.qasm",
+        "circuits\\pyzx\\hwb10.qasm",
+        "circuits\\pyzx\\hwb12.qasm",
+        "circuits\\pyzx\\mod_adder_1024.qasm",
+        "circuits\\pyzx\\vbe_adder_3.qasm",
+        "circuits/large/adder_n28/adder_n28.qasm",
+        "circuits/large/adder_n64/adder_n64.qasm",
+        "circuits/large/adder_n118/adder_n118.qasm",
+        "circuits/large/bv_n30/bv_n30.qasm",
+        "circuits/large/bv_n70/bv_n70.qasm",
+        "circuits/large/cat_n35/cat_n35.qasm",
+        "circuits/large/cat_n65/cat_n65.qasm",
+        "circuits/large/ghz_n40/ghz_n40.qasm",
+        "circuits/large/ghz_n78/ghz_n78.qasm",
+        "circuits/large/ghz_n127/ghz_n127.qasm",
+        "circuits/small/hhl_n7/hhl_n7.qasm",
+        "circuits/small/hhl_n10/hhl_n10.qasm",
+        "circuits/large/multiplier_n45/multiplier_n45.qasm",
+        "circuits/large/multiplier_n75/multiplier_n75.qasm",
+        "circuits/large/qft_n29/qft_n29.qasm",
+        "circuits/large/qft_n63/qft_n63.qasm",
+        "circuits/medium/qram_n20/qram_n20.qasm",
+        "circuits/large/qugan_n39/qugan_n39.qasm",
+        "circuits/large/qugan_n71/qugan_n71.qasm",
+        "circuits/large/qugan_n111/qugan_n111.qasm",
+        "circuits/small/vqe_uccsd_n4/vqe_uccsd_n4.qasm",
+        "circuits/small/vqe_uccsd_n6/vqe_uccsd_n6.qasm",
+        "circuits/small/vqe_uccsd_n8/vqe_uccsd_n8.qasm",
+        "circuits/large/wstate_n36/wstate_n36.qasm",
+        "circuits/large/wstate_n76/wstate_n76.qasm",
+        "circuits/large/wstate_n118/wstate_n118.qasm",
+    };
+    bool benchmark = true;
+    int benchmarkIterations = 10;
+    std::string benchmarkName = "benchmark_1";
+    if(benchmark) {
+        for(std::string circuit : circuits) {
+
+            BenchmarkData averageData;
+            averageData.circuit_name = circuit;
+
+            averageData.measurement_group = benchmarkName + "_seq";
+            for(int i = 0; i < benchmarkIterations; i++) {
+                BenchmarkData executionData = zx::testParallelExtraction(circuit, benchmarkName + "_seq", false);
+                averageData.mergeData(executionData);
+            }
+            averageData.finish();
+
+            averageData.measurement_group = benchmarkName + "_par";
+            for(int i = 0; i < benchmarkIterations; i++) { 
+                BenchmarkData executionData = zx::testParallelExtraction(circuit, benchmarkName + "_par", true, "noClaim");
+                averageData.mergeData(executionData);
+            }
+            averageData.finish();
+
+            averageData.measurement_group = benchmarkName + "_parFull";
+            for(int i = 0; i < benchmarkIterations; i++) { 
+                BenchmarkData executionData = zx::testParallelExtraction(circuit, benchmarkName + "_parFull", true, "full");
+                averageData.mergeData(executionData);
+            }
+            averageData.finish();
+        }
+        return 0;
+    }
+
+/*     if(argc > 3) {
         bool parallelization = strcmp(argv[3], "true") == 0 || strcmp(argv[3], "1") == 0;
         std::cout << "Parallelization: " << parallelization << " | " << argv[3] << std::endl;
 
         if(argc > 4) {
             zx::testParallelExtraction(argv[1], argv[2], parallelization, true, std::stoi(argv[4]));
         }
-        else zx::testParallelExtraction(argv[1], argv[2], parallelization);
+        else {
+            zx::testParallelExtraction(argv[1], argv[2], parallelization);   
+        }
     }
-    else zx::testParallelExtraction();
+    else zx::testParallelExtraction(); */
     return 0;
 
 

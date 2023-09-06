@@ -24,6 +24,9 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 #include <omp.h>
+#include <iostream>
+#include <fstream>
+#include <sstream>
 #define DEBUG false
 
 
@@ -93,7 +96,12 @@ namespace zx {
             if (!diag.phase(v).isZero()) {
                 THREAD_SAFE_PRINT( "Removing phase at " << v << std::endl);
                 diag.setPhase(v, PiExpression());
-            }      
+            } 
+
+            // Add entry to frontier if it does not exist
+            if(frontier.count(qubit) == 0) {
+                frontier[qubit] = v;
+            }     
 
         }
         THREAD_SAFE_PRINT( "CNOT-edges preparation for finalization..." << std::endl);
@@ -132,17 +140,34 @@ namespace zx {
 
         THREAD_SAFE_PRINT( "Outputs:" << std::endl);
         if(DEBUG)printVector(outputs);
-
+        size_t originalVerts = diag.getNVertices(); 
         int i = 0;
         while (frontier.size() > 0) {
-
+            auto a = omp_get_wtime();
             extractRZ_CZ();
+            auto b = omp_get_wtime();
+            time_extr_seq_cz += (b - a) * 1000.0;
+
+            a = omp_get_wtime();
             extractCNOT();
+            b = omp_get_wtime();
+            time_extr_seq_cnot += (b - a) * 1000.0;
+
+            a = omp_get_wtime();
             processFrontier();
+            b = omp_get_wtime();
+            time_extr_seq_fp += (b - a) * 1000.0;
+
             if(DEBUG) THREAD_SAFE_PRINT( "Iteration " << i << " thread " << omp_get_thread_num() << std::endl);
             i++;
-        };
 
+            if(i % 10 == 0) {
+                size_t currentVerts = diag.getNVertices(); 
+                float percentage = 100 - (((float) currentVerts) / ((float) originalVerts)) * 100;
+                std::cout << "Completion: " << percentage << "%" << std::endl;
+            }
+        };
+        std::cout << "El finito" <<std::endl;
         THREAD_SAFE_PRINT( "Finished extraction. Reversing circuit and finding swaps..." << std::endl);
 
         THREAD_SAFE_PRINT( "Inputs:" << std::endl);
@@ -177,6 +202,7 @@ namespace zx {
                     // Check if edge to input is hadamard
                     if (edge.type == zx::EdgeType::Hadamard) {
                         circuit.h(q);
+                        num_gates_h++;
                         diag.setEdgeType(outputs[q], edge.to, EdgeType::Simple);
                     }
                     auto qw = (zx::Qubit)(it - inputs.begin());
@@ -194,6 +220,7 @@ namespace zx {
             // Check for swaps
             for (auto s: permutation_as_swaps(swaps)) {
                 circuit.swap(s.first, s.second);
+                num_gates_swap++;
             }
         }
 
@@ -205,6 +232,7 @@ namespace zx {
         qc::CircuitOptimizer::cancelCNOTs(circuit);
         //auto end = std::chrono::steady_clock::now();
         //measurement.addMeasurement("extract:cancelCNOTs", begin, end);
+        parallelize = true;
         return i;
     }
 
@@ -221,6 +249,7 @@ namespace zx {
                 if (edge.type == zx::EdgeType::Hadamard) {
                     THREAD_SAFE_PRINT( "Adding Hadamard at " << v.first << std::endl);
                     circuit.h(v.first);
+                    num_gates_h++;
                     diag.setEdgeType(v.second, w, zx::EdgeType::Simple);
                 }
             }
@@ -230,7 +259,7 @@ namespace zx {
     int ExtractorParallel::extract() {
         THREAD_SAFE_PRINT( "Extractor " << omp_get_thread_num() << " started!" << std::endl);
         initFrontier();
-        
+        size_t originalVerts = diag.getNVertices(); 
 
         extractOutputHadamards();
 
@@ -238,10 +267,11 @@ namespace zx {
 
         while (frontier.size() > 0) {
             ////auto //begin = std::chrono::steady_clock::now();
-            //auto a = omp_get_wtime();
+            auto a = omp_get_wtime();
             extractRZ_CZ();
-            //auto b = omp_get_wtime();
-            //rz_cz += (b - a) * 1000.0;
+            auto b = omp_get_wtime();
+            if(parallelize) time_extr_par_cz += (b - a) * 1000.0;
+            else time_extr_seq_cz += (b - a) * 1000.0;
             //auto end = std::chrono::steady_clock::now();
             //measurement.addMeasurement("extract:extractRZ_CZ", begin, end);
 
@@ -262,32 +292,51 @@ namespace zx {
             
 
             //begin = std::chrono::steady_clock::now();
-            //a = omp_get_wtime();
+            a = omp_get_wtime();
             int interrupted_cnot = 2;
+            double X = 0.0;
             
+            int u = 0;
             while(interrupted_cnot == 2) { // 0 = success, 1 = interrupted, 2 = re-do
+                if(u == 1) X = omp_get_wtime();
                 interrupted_cnot = extractCNOT();
+                u++;
             }
-            //b = omp_get_wtime();
-            //cnot_time += (b - a) * 1000.0;
+            b = omp_get_wtime();
+            if(parallelize) time_extr_par_cnot += (b - a) * 1000.0;
+            else time_extr_seq_cnot += (b - a) * 1000.0;
+            if(X > 0.0) time_cnot_failed_extraction += (b - X) * 1000.0;
+
             //end = std::chrono::steady_clock::now();
             //measurement.addMeasurement("extract:extractCNOT", begin, end);
 
             //begin = std::chrono::steady_clock::now();
-            //a = omp_get_wtime();
+            a = omp_get_wtime();
             bool interrupted_processing = !processFrontier();
-            //b = omp_get_wtime();
-            //processFrontierTime += (b - a) * 1000.0;
+            b = omp_get_wtime();
+            if(parallelize) time_extr_par_fp += (b - a) * 1000.0;
+            else time_extr_seq_fp += (b - a) * 1000.0;
             //end = std::chrono::steady_clock::now();
             //measurement.addMeasurement("extract:processFrontier", begin, end);
             if(DEBUG) THREAD_SAFE_PRINT( "Iteration " << iteration << " thread " << omp_get_thread_num() << std::endl);
             
             iteration++;
+            if(iteration % 10 == 0) {
+                size_t currentVerts = diag.getNVertices(); 
+                float percentage = 100 - (((float) currentVerts) / ((float) originalVerts)) * 100;
+                //std::cout << "Completion: " << percentage << "%" << std::endl;
+            }
+
             if( parallelize && (interrupted_cnot == 1 ||  interrupted_processing || other_extractor->isFinished())) {
+                a = omp_get_wtime();
                 extractRZ_CZ();
+                b = omp_get_wtime();
+                if(parallelize) time_extr_par_cz += (b - a) * 1000.0;
+                else time_extr_seq_cz += (b - a) * 1000.0;
                 if(DEBUG) THREAD_SAFE_PRINT( "Thread " << thread_num << " was interrupted! ------------------------------------------------------------------------" << std::endl);
 
                 finished.store(true, std::memory_order::memory_order_relaxed);
+                std::cout << "K THX BYE " << interrupted_cnot << std::endl;
                 return iteration;
             }
             
@@ -330,6 +379,7 @@ namespace zx {
                     // Check if edge to input is hadamard
                     if (edge.type == zx::EdgeType::Hadamard) {
                         circuit.h(q);
+                        num_gates_h++;
                         diag.setEdgeType(outputs[q], edge.to, EdgeType::Simple);
                     }
                     auto qw = (zx::Qubit)(it - inputs.begin());
@@ -347,6 +397,7 @@ namespace zx {
             // Check for swaps
             for (auto s: permutation_as_swaps(swaps)) {
                 circuit.swap(s.first, s.second);
+                num_gates_swap++;
             }
         }
 
@@ -359,6 +410,111 @@ namespace zx {
         //auto end = std::chrono::steady_clock::now();
         //measurement.addMeasurement("extract:cancelCNOTs", begin, end);
         return iteration;
+    }
+
+    void ExtractorParallel::printStatistics() {
+        // Print the statistics
+        std::cout << "-----------------------------------------------" << std::endl;
+        std::cout << "// Thread " << thread_num << std::endl;
+
+        std::cout << "// Time for extraction operations" << std::endl;
+        std::cout << "time_extr_par_cnot = " << time_extr_par_cnot  << std::endl;
+        std::cout << "time_extr_par_cz = " << time_extr_par_cz  << std::endl;
+        std::cout << "time_extr_par_fp = " << time_extr_par_fp  << std::endl;
+        std::cout << std::endl;
+
+        if(thread_num == 0) {
+            std::cout << "time_extr_seq_cnot = " << time_extr_seq_cnot  << std::endl;
+            std::cout << "time_extr_seq_cz = " << time_extr_seq_cz  << std::endl;
+            std::cout << "time_extr_seq_fp = " << time_extr_seq_fp  << std::endl;
+            std::cout << std::endl;
+        }
+
+        if(parallelize) {
+            std::cout << "time_cnot_failed_extraction = " << time_cnot_failed_extraction  << std::endl;
+            std::cout << std::endl;
+        }
+
+        std::cout << "// Number of extraction operations" << std::endl;
+        std::cout << "num_extr_par_cnot = " << num_extr_par_cnot  << std::endl;
+        std::cout << "num_extr_par_cz = " << num_extr_par_cz  << std::endl;
+        std::cout << "num_extr_par_fp = " << num_extr_par_fp  << std::endl;
+        std::cout << std::endl;
+
+        if(thread_num == 0) {
+            std::cout << "num_extr_seq_cnot = " << num_extr_seq_cnot  << std::endl;
+            std::cout << "num_extr_seq_cz = " << num_extr_seq_cz  << std::endl;
+            std::cout << "num_extr_seq_fp = " << num_extr_seq_fp  << std::endl;
+            std::cout << std::endl;
+        }
+
+        if(parallelize) {
+            std::cout << "failedCnots = " << failedCnots  << std::endl;
+            std::cout << std::endl;
+        }
+
+        std::cout << "// Number of gates created during extraction" << std::endl;
+        std::cout << "num_gates_cnot = " << num_gates_cnot  << std::endl;
+        std::cout << "num_gates_cz = " << num_gates_cz  << std::endl;
+        std::cout << "num_gates_phase = " << num_gates_phase  << std::endl;
+        std::cout << "num_gates_h = " << num_gates_h  << std::endl;
+        std::cout << "num_gates_swap = " << num_gates_swap  << std::endl;
+
+
+        // Write the output to a CSV file
+        std::ostringstream output;
+
+        output << measurement_group;
+        output << "," << circuit_name;
+        output << "," << parallel_iterations;
+        output << "," << total_iterations;
+        output << "," << (total_iterations > 0 ?  ((double)parallel_iterations / (double)total_iterations) : 0);
+        output << "," << time_extr_par_cnot;
+        output << "," << time_extr_par_cz;
+        output << "," << time_extr_par_fp;
+
+        output << "," << time_cnot_failed_extraction;
+
+        output << "," << time_extr_seq_cnot;
+        output << "," << time_extr_seq_cz;
+        output << "," << time_extr_seq_fp;
+
+        output << "," << time_cnot_neighbors;
+        output << "," << time_cnot_biadj;
+        output << "," << time_cnot_optimal;
+        output << "," << time_cnot_gauss;
+        
+        // Amount of extraction operations
+
+        output << "," << num_extr_par_cnot;
+        output << "," << num_extr_par_cz;
+        output << "," << num_extr_par_fp;
+
+        output << "," << failedCnots;
+
+        output << "," << num_extr_seq_cnot;
+        output << "," << num_extr_seq_cz;
+        output << "," << num_extr_seq_fp;
+
+        // Single operation times
+        output << "," << (num_extr_par_cnot > 0 ? time_extr_par_cnot / num_extr_par_cnot : 0);
+        output << "," << (num_extr_par_cz > 0 ? time_extr_par_cz / num_extr_par_cz : 0);
+        output << "," << (num_extr_par_fp > 0 ? time_extr_par_fp/ num_extr_par_fp : 0);
+
+        output << "," << (num_extr_seq_cnot > 0 ? time_extr_seq_cnot / num_extr_seq_cnot : 0);
+        output << "," << (num_extr_seq_cz > 0 ? time_extr_seq_cz / num_extr_seq_cz : 0);
+        output << "," << (num_extr_seq_fp > 0 ? time_extr_seq_fp/ num_extr_seq_fp : 0);
+
+        output << "," << num_gates_cnot;
+        output << "," << num_gates_cz;
+        output << "," << num_gates_phase;
+        output << "," << num_gates_h;
+        output << "," << num_gates_swap;
+        output << std::endl;
+        
+        std::ofstream csvFile("H:/Uni/Masterarbeit/statistics_complete.csv", std::ios::out | std::ios::app);
+        csvFile << output.str(); 
+        csvFile.close();
     }
 
     void ExtractorParallel::initFrontier() {
@@ -374,6 +530,8 @@ namespace zx {
     void ExtractorParallel::extractRZ_CZ() {
         THREAD_SAFE_PRINT( "Extracting RZ and CZ gates..." << std::endl);
 
+        if(parallelize) num_extr_par_cz++;
+        else num_extr_seq_cz++;
         ////auto //begin = std::chrono::steady_clock::now();
         // Extract RZ: Add phase-gate at v with phase p
         for (auto v: frontier) {
@@ -384,6 +542,7 @@ namespace zx {
                     exit(0);
                 }
                 circuit.phase(v.first, diag.phase(v.second).getConst().toDouble());
+                num_gates_phase++;
                 diag.setPhase(v.second, PiExpression());
             }
         }
@@ -405,6 +564,7 @@ namespace zx {
                     if(handled_vertices.count(w) == 0) {
                         THREAD_SAFE_PRINT( "Adding CZ gate at " << v.first << "/" << it->first << std::endl);
                         circuit.z(v.first, dd::Control{qw});
+                        num_gates_cz++;
                         edges_to_remove.push_back({v.second, w});
                     }   
                 }
@@ -431,11 +591,14 @@ namespace zx {
 
         // Get frontier neighbors and check at the same time
         ////auto //begin = std::chrono::steady_clock::now();
+        auto a = omp_get_wtime();
         bool cnot_necessary = parallelize ? get_frontier_neighbors_parallel(&frontier_values)  : get_frontier_neighbors();
         if(!cnot_necessary) {
             THREAD_SAFE_PRINT( "No need for CNOT extraction. " << std::endl);
             return 0;
         }
+        auto b = omp_get_wtime();
+        time_cnot_neighbors += (b - a) * 1000.0;
 
         //auto end = std::chrono::steady_clock::now();
         //measurement.addMeasurement("extract:extractCNOT:check", begin, end);
@@ -454,16 +617,16 @@ namespace zx {
         if(DEBUG)printVector(frontier_neighbors);
 
         // Get biadjacency matrix of frontier/neighbors
-    
-        // TODO: Omit frontier vertices that are neighbors to marked vertices
+        a = omp_get_wtime();
         auto adjMatrix = getAdjacencyMatrix(frontier_values, frontier_neighbors);
+        b = omp_get_wtime();
+        time_cnot_biadj += (b - a) * 1000.0;
         //end            = std::chrono::steady_clock::now();
         //measurement.addMeasurement("extract:extractCNOT:biadjacencyMatrix", begin, end);
 
         THREAD_SAFE_PRINT( "Adjacency Matrix:" << std::endl);
         if(DEBUG)printMatrix(adjMatrix);
-
-        bool perm_optimization = true;
+        a = omp_get_wtime();
         if (perm_optimization) { // TODO: Measure time
             THREAD_SAFE_PRINT( "Finding optimal column swaps" << std::endl);
             std::unordered_map<int, int> perm = column_optimal_swap(adjMatrix);
@@ -481,11 +644,19 @@ namespace zx {
             THREAD_SAFE_PRINT( "New Adjacency Matrix:" << std::endl);
             //if(DEBUG)printMatrix(adjMatrix);
         }
-
+        b = omp_get_wtime();
+        time_cnot_optimal += (b - a) * 1000.0;
         // Gauss reduction on biadjacency matrix
         //begin                                                      = std::chrono::steady_clock::now();
-        std::vector<std::pair<zx::Qubit, zx::Qubit>> rowOperations = gaussElimination(adjMatrix);
 
+        a = omp_get_wtime();
+        std::vector<std::pair<zx::Qubit, zx::Qubit>> rowOperations = gaussElimination(adjMatrix);
+        b = omp_get_wtime();
+        time_cnot_gauss += (b - a) * 1000.0;
+        
+        
+        if(parallelize) num_extr_par_cnot++;
+        else num_extr_seq_cnot++;
         //end = std::chrono::steady_clock::now();
         //measurement.addMeasurement("extract:extractCNOT:gaussElimination", begin, end);
         THREAD_SAFE_PRINT( "After Gauss Elimination:" << std::endl);
@@ -514,14 +685,24 @@ namespace zx {
         //begin = std::chrono::steady_clock::now();
         if (!singleOneRowExists) {
             THREAD_SAFE_PRINT( "Ws is 0" << std::endl);
-            /* if(!parallelize) exit(0);
+            std::cout << "WS IS 0" << std::endl;
 
+            /* if(!parallelize) exit(0);
+            
         
             return false;
             exit(0); */
-
-            return 1;
+            
+            if(parallelize) return 1;
             bool yzFound = false;
+
+            printVector(frontier);
+            printVector(other_extractor->frontier);
+            printMatrix(adjMatrix);
+            printVector(rowOperations);
+            diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test1.json", mapToVector(frontier));
+            (other_extractor->diag).toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(other_extractor->frontier));
+            exit(0);
 
             // Extract YZ-spiders
             for (auto v: frontier_neighbors) {
@@ -765,6 +946,7 @@ namespace zx {
                         THREAD_SAFE_PRINT( " Entries " << control_qubit << "|" << control_entry.second << " , " << target_qubit << "|" << target_entry.second << std::endl);
 
                         circuit.x(target_qubit, dd::Control{(dd::Qubit)control_qubit});
+                        num_gates_cnot++;
                         THREAD_SAFE_PRINT( "Added CNOT (T:" << target_qubit << ", C:" << control_qubit << ")" << std::endl);
 
                         auto ftarg = control_entry.second;
@@ -870,6 +1052,7 @@ namespace zx {
                 THREAD_SAFE_PRINT( " Entries " << control_qubit << "|" << control_entry.second << " , " << target_qubit << "|" << target_entry.second << std::endl);
 
                 circuit.x(target_qubit, dd::Control{(dd::Qubit)control_qubit});
+                num_gates_cnot++;
                 THREAD_SAFE_PRINT( "Added CNOT (T:" << target_qubit << ", C:" << control_qubit << ")" << std::endl);
 
                 auto ftarg = control_entry.second;
@@ -910,6 +1093,9 @@ namespace zx {
         THREAD_SAFE_PRINT( "Processing Frontier... " << std::endl);
         THREAD_SAFE_PRINT( "Frontier:" << std::endl);
         //if(DEBUG)printVector(frontier);
+
+        if(parallelize) num_extr_par_fp++;
+        else num_extr_seq_fp++;
 
         std::map<zx::Qubit, int> new_frontier;
 
@@ -986,6 +1172,7 @@ namespace zx {
 
             if (uneven_hadamard) {
                 circuit.h(v.first);
+                num_gates_h++;
                 THREAD_SAFE_PRINT( "Adding Hadamard at " << v.first << std::endl);
             }
             THREAD_SAFE_PRINT( "Chain found:" << std::endl);
@@ -1050,6 +1237,8 @@ namespace zx {
         return true;
     }
 
+    // Check whether all frontier vertices have more than two neighbors
+    // and at the same time, adds non-output neighbors to frontier_neighbors
     bool ExtractorParallel::get_frontier_neighbors() {
         std::vector<Vertex> neighbors;
 
@@ -1102,8 +1291,6 @@ namespace zx {
     }
 
 
-    // In contrast to the normal get_frontier_neighbors, this function only adds unmarked neighbors.
-    // If a neighbor was marked already, it retroactively removes the froniter vertex, and all its neighbors
     bool ExtractorParallel::get_frontier_neighbors_parallel(std::vector<zx::Vertex>* frontier_values) {
         std::vector<Vertex> neighbors;
         #pragma omp critical(claim)
@@ -1548,8 +1735,8 @@ namespace zx {
 
     
 
-    void testParallelExtraction(std::string circuitName, std::string measurementGroup, bool parallelization, bool random, int randomQubits) {
-        std::cout << "Extraction testing" << std::endl;
+    BenchmarkData testParallelExtraction(std::string circuitName, std::string measurementGroup, bool parallelization, std::string featureSet, bool random, int randomQubits) {
+        //std::cout << "Extraction testing" << std::endl;
         Measurement measurement;
 
         if (DEBUG) std::cout << "Setting up...\n";
@@ -1567,9 +1754,10 @@ namespace zx {
             qc->import("H:/Uni/Masterarbeit/qcec/" + circuitName);
         }
         
-
-        qc->dump("H:/Uni/Masterarbeit/pyzx/thesis/original.qasm");
-
+        //std::cout << "Circuit loaded" << std::endl;
+        //qc->dump("H:/Uni/Masterarbeit/pyzx/thesis/original.qasm");
+        //std::cout << "ASd " << qc->getNops() << std::endl;
+        //qc->printStatistics(std::cout);
         if (DEBUG) std::cout << "Circuit to extract:" << std::endl;
         //if (DEBUG) std::cout << qc << std::endl;
         auto begin = std::chrono::steady_clock::now();
@@ -1577,21 +1765,34 @@ namespace zx {
         zx::ZXDiagram zxDiag = zx::FunctionalityConstruction::buildFunctionality(qc.get());
 
         zxDiag.toGraphlike();
+/*         auto vertNumBefore = zxDiag.getNVertices();
+        std::cout << "Vertices (before) " << zxDiag.getNVertices() << std::endl;
+        std::cout << "Edges (before) " << zxDiag.getNEdges() << std::endl; */
         //zxDiag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json");
 
-        std::cout << "Simplifying" << std::endl;
-        zx::interiorCliffordSimp(zxDiag);
+        //std::cout << "Simplifying" << std::endl;
+        //zx::interiorCliffordSimp(zxDiag);
         //zx::fullReduce(zxDiag);
         auto end = std::chrono::steady_clock::now();
         measurement.addMeasurement("simplification", begin, end);
 
-        std::cout << "Extracting" << std::endl;
+/* 
+        auto vertNumAfter = zxDiag.getNVertices();
+        std::cout << "Vertices (after) " << zxDiag.getNVertices() << std::endl;
+        std::cout << "Edges (after) " << zxDiag.getNEdges() << std::endl;
+
+        auto percentageReduction = vertNumBefore / vertNumAfter * 100;
+        std::cout << "% reduction " << percentageReduction << std::endl; */
+
+        //std::cout << "Extracting" << std::endl;
         int iterations = 0;
         int parallel_iterations = 0;
+        BenchmarkData data;
         if(parallelization) {
             std::cout << "Starting parallel extraction" << std::endl;
 
-            begin = std::chrono::steady_clock::now(); // Start measurement
+            //begin = std::chrono::steady_clock::now(); // Start measurement
+            auto a = omp_get_wtime();
 
             qc::QuantumComputation qc_extracted = qc::QuantumComputation(zxDiag.getNQubits());
             zx::ZXDiagram          zxDiag_reversed = zxDiag.reverse();
@@ -1601,6 +1802,10 @@ namespace zx {
 
             ExtractorParallel extractor1(qc_extracted, zxDiag, 0, &claimed_vertices, measurement);
             ExtractorParallel extractor2(qc_extracted_2, zxDiag_reversed, 1, &claimed_vertices, measurement);
+            extractor1.circuit_name = circuitName;
+            extractor2.circuit_name = circuitName;
+            extractor1.measurement_group = measurementGroup;
+            extractor2.measurement_group = measurementGroup;
 
             extractor1.other_extractor = &extractor2; // IMPROVE: needed?
             extractor2.other_extractor = &extractor1;
@@ -1634,48 +1839,71 @@ namespace zx {
             THREAD_SAFE_PRINT( "Combining diagrams" << std::endl);
             qc_extracted_2.combine(qc_extracted);
 
-            end = std::chrono::steady_clock::now(); // End measurement
-            measurement.addMeasurement("extract", begin, end);
+            //end = std::chrono::steady_clock::now(); // End measurement
+            //measurement.addMeasurement("extract", begin, end);
 
-            qc_extracted.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted2.qasm");
+            auto b = omp_get_wtime();
+            extractor1.time_total += (b - a) * 1000.0;
 
-            std::cout << "Finished Circuit" << std::endl;
+            //qc_extracted.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted2.qasm");
+
+            //std::cout << "Finished Circuit" << std::endl;
             //std::cout << qc_extracted_2 << std::endl;
 
-            qc_extracted_2.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted.qasm");
+            //qc_extracted_2.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted.qasm");
             //std::cout << "Circuit " << circuitName << std::endl;
-            std::cout << "Parallel iterations: " << iterations_1 << "||" << iterations_2 << std::endl;
+            //std::cout << "Parallel iterations: " << iterations_1 << "||" << iterations_2 << std::endl;
 
             iterations = std::max(iterations_1, iterations_2) + iterations_seq;
             parallel_iterations = std::min(iterations_1, iterations_2);
 
             float degree_of_parallelism = std::min(iterations_1, iterations_2) / iterations;
+            extractor1.parallel_iterations = parallel_iterations;
+            extractor1.total_iterations = iterations_1 + iterations_2 + iterations_seq;
+            extractor2.total_iterations = 0;
+            extractor2.parallel_iterations = 0;
+            //extractor1.printStatistics();
+            //extractor2.printStatistics();
+            //qc_extracted_2.printStatistics(std::cout);
+
+            data = extractor1.createBenchmarkData();
+            BenchmarkData data2 = extractor2.createBenchmarkData();
+            data.averageData(data2);
         }
         else {
             std::cout << "Starting non-parallel extraction" << std::endl;
 
-            begin = std::chrono::steady_clock::now(); // Start measurement
+            //begin = std::chrono::steady_clock::now(); // Start measurement
+            auto a = omp_get_wtime();
 
             qc::QuantumComputation qc_extracted = qc::QuantumComputation(zxDiag.getNQubits());
             ExtractorParallel extractor1(qc_extracted, zxDiag, measurement);
+            extractor1.circuit_name = circuitName;
+            extractor1.measurement_group = measurementGroup;
             iterations = extractor1.extract();
 
-            end = std::chrono::steady_clock::now(); // End measurement
-            measurement.addMeasurement("extract", begin, end);
+            //end = std::chrono::steady_clock::now(); // End measurement
+            //measurement.addMeasurement("extract", begin, end);
+            auto b = omp_get_wtime();
+            extractor1.time_total += (b - a) * 1000.0;
             
-            std::cout << "Finished Circuit" << std::endl;
+            //std::cout << "Finished Circuit" << std::endl;
             //std::cout << qc_extracted << std::endl;
 
-            qc_extracted.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted.qasm");
+            //qc_extracted.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted.qasm");
+            extractor1.total_iterations = iterations;
+            //extractor1.printStatistics();
+            //qc_extracted.printStatistics(std::cout);
             //std::cout << "Circuit " << circuitName << ":" << std::endl;
+            data = extractor1.createBenchmarkData();
         }
-        std::cout << "Total iterations: " << iterations << std::endl;
+        //std::cout << "Total iterations: " << iterations << std::endl;
         
         //std::cout << "Circuit to extract:" << std::endl;
         //std::cout << qc << std::endl;
        
         
-
-        measurement.printMeasurements(measurementGroup, circuitName, parallel_iterations, iterations, "H:/Uni/Masterarbeit/measurements_new.csv");
+        //measurement.printMeasurements(measurementGroup, circuitName, parallel_iterations, iterations, "H:/Uni/Masterarbeit/measurements_new.csv");
+        return data;
     }
 } // namespace zx

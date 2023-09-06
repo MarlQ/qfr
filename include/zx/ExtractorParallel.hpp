@@ -11,6 +11,7 @@
 #include "dd/Control.hpp"
 #include "zx/FunctionalityConstruction.hpp"
 #include "zx/Measurement.hpp"
+#include "zx/BenchmarkData.hpp"
 //#include "EquivalenceCheckingManager.hpp"
 //#include "gtest/gtest.h"
 #include <algorithm>
@@ -54,7 +55,7 @@ namespace zx {
         ExtractorParallel(qc::QuantumComputation& circuit, ZXDiagram& diag, Measurement measurement = Measurement(true));
         ExtractorParallel* other_extractor;
         std::unordered_map<size_t, int>* claimed_vertices; // Vertices marked by the thread in parallel execution
-        
+        void printStatistics();
         int extract();
         int finalizeExtraction(std::map<zx::Qubit, zx::Vertex> other_frontier);
         std::vector<size_t> frontierToInputs();
@@ -65,17 +66,89 @@ namespace zx {
         std::unordered_map<size_t, std::unordered_set<size_t>> added_edges;
         std::unordered_set<size_t> claimed_neighbors;
 
-        int failedCnots = 0;
-        double cnot_time = 0;
-        double rz_cz = 0;
-        double processFrontierTime = 0;
-        double parallel_time = 0;
-
+        double time_total = 0;
         int iteration = 0;
+
+        int parallel_iterations = 0;
+        int total_iterations = 0;
+        std::string circuit_name = "";
+        std::string measurement_group = "";
+
+        // Whether to use heuristic optimization for column order before gauss elim
+        bool perm_optimization = false;
+
+        // Time for extraction operations
+        double time_extr_par_cnot = 0;
+        double time_extr_par_cz = 0;
+        double time_extr_par_fp = 0;
+
+        double time_extr_seq_cnot = 0;
+        double time_extr_seq_cz = 0;
+        double time_extr_seq_fp = 0;
+        
+        double time_cnot_failed_extraction = 0;
+
+        double time_cnot_gauss = 0;
+        double time_cnot_biadj = 0;
+        double time_cnot_optimal = 0;
+        double time_cnot_neighbors = 0;
+
+        // Number of extraction operations
+        int num_extr_par_cnot = 0;
+        int num_extr_par_cz = 0;
+        int num_extr_par_fp = 0;
+
+        int num_extr_seq_cnot = 0;
+        int num_extr_seq_cz = 0;
+        int num_extr_seq_fp = 0;
+
+        int failedCnots = 0;
+
+        // Number of gates created during extraction
+        int num_gates_cnot = 0;
+        int num_gates_cz = 0;
+        int num_gates_phase = 0;
+        int num_gates_h = 0;
+        int num_gates_swap = 0;
 
         bool isFinished() const {
             return finished.load(std::memory_order::memory_order_relaxed);
         }   
+
+        BenchmarkData ExtractorParallel::createBenchmarkData() {
+            BenchmarkData data;
+
+            // Fill the BenchmarkData object with the extractor's information
+            data.time_total = time_total;
+            data.parallel_iterations = parallel_iterations;
+            data.total_iterations = total_iterations;
+            data.time_extr_par_cnot = time_extr_par_cnot;
+            data.time_extr_par_cz = time_extr_par_cz;
+            data.time_extr_par_fp = time_extr_par_fp;
+            data.time_extr_seq_cnot = time_extr_seq_cnot;
+            data.time_extr_seq_cz = time_extr_seq_cz;
+            data.time_extr_seq_fp = time_extr_seq_fp;
+            data.time_cnot_failed_extraction = time_cnot_failed_extraction;
+            data.time_cnot_gauss = time_cnot_gauss;
+            data.time_cnot_biadj = time_cnot_biadj;
+            data.time_cnot_optimal = time_cnot_optimal;
+            data.time_cnot_neighbors = time_cnot_neighbors;
+            data.num_extr_par_cnot = num_extr_par_cnot;
+            data.num_extr_par_cz = num_extr_par_cz;
+            data.num_extr_par_fp = num_extr_par_fp;
+            data.num_extr_seq_cnot = num_extr_seq_cnot;
+            data.num_extr_seq_cz = num_extr_seq_cz;
+            data.num_extr_seq_fp = num_extr_seq_fp;
+            data.failedCnots = failedCnots;
+            data.num_gates_cnot = num_gates_cnot;
+            data.num_gates_cz = num_gates_cz;
+            data.num_gates_phase = num_gates_phase;
+            data.num_gates_h = num_gates_h;
+            data.num_gates_swap = num_gates_swap;
+
+            return data;
+        }
+        
 
     private:
         qc::QuantumComputation& circuit;
@@ -135,9 +208,9 @@ namespace zx {
 
         void printVector(std::vector<size_t> vec) {
         for(auto const& v : vec) {
-            THREAD_SAFE_PRINT( v << " ,");
+            THREAD_SAFE_PRINT_2( v << " ,");
         }
-        THREAD_SAFE_PRINT( std::endl);
+        THREAD_SAFE_PRINT_2( std::endl);
     }
 
     void printVector(std::vector<dd::Qubit> vec) {
@@ -162,9 +235,9 @@ namespace zx {
     }
     void printVector(std::map<zx::Qubit, zx::Vertex> vec) {
         for(auto const& v : vec) {
-            THREAD_SAFE_PRINT( v.first << " : " << v.second << " ,");
+            THREAD_SAFE_PRINT_2( v.first << " : " << v.second << " ,");
         }
-        THREAD_SAFE_PRINT( std::endl);
+        THREAD_SAFE_PRINT_2( std::endl);
     }
     void printVector(std::map<zx::Vertex, zx::Vertex> vec) {
         for(auto const& v : vec) {
@@ -181,16 +254,16 @@ namespace zx {
 
     void printVector(std::vector<bool> vec) {
         for(auto const& v : vec) {
-            THREAD_SAFE_PRINT( v << " ,");
+            THREAD_SAFE_PRINT_2( v << " ,");
         }
-        THREAD_SAFE_PRINT( std::endl);
+        THREAD_SAFE_PRINT_2( std::endl);
     }
 
     void printVector(std::vector<std::pair<int, int>> vec) {
         for(auto const& v : vec) {
-            THREAD_SAFE_PRINT( "(" << v.first << "," << v.second << ") ,");
+            THREAD_SAFE_PRINT_2( "(" << v.first << "," << v.second << ") ,");
         }
-        THREAD_SAFE_PRINT( std::endl);
+        THREAD_SAFE_PRINT_2( std::endl);
     }
 
     void printVector(std::set<std::pair<zx::Vertex, zx::Vertex>> vec) {
@@ -204,11 +277,11 @@ namespace zx {
         for(auto const& row : matrix) {
             printVector(row);
         }
-        THREAD_SAFE_PRINT( std::endl);
+        THREAD_SAFE_PRINT_2( std::endl);
     }
 
     };
     
-    void testParallelExtraction(std::string circuitName="vbe_adder_3.qasm", std::string measurementGroup="1", bool parallelization=false, bool random=false, int randomQubits=0);
+    BenchmarkData testParallelExtraction(std::string circuitName="vbe_adder_3.qasm", std::string measurementGroup="1", bool parallelization=false, std::string featureSet="full", bool random=false, int randomQubits=0);
 
 } // namespace zx
