@@ -72,9 +72,10 @@ int main(int argc, char** argv) {
         "circuits/large/wstate_n118/wstate_n118.qasm",
     };
     bool benchmark = true;
-    int benchmarkIterations = 10;
-    std::string benchmarkName = "benchmark_1";
+    int benchmarkIterations = 20;
+    std::string benchmarkName = "benchmark_6";
     if(benchmark) {
+        zx::ExtractorConfig config;
         for(std::string circuit : circuits) {
 
             BenchmarkData averageData;
@@ -82,21 +83,23 @@ int main(int argc, char** argv) {
 
             averageData.measurement_group = benchmarkName + "_seq";
             for(int i = 0; i < benchmarkIterations; i++) {
-                BenchmarkData executionData = zx::testParallelExtraction(circuit, benchmarkName + "_seq", false);
+                BenchmarkData executionData = zx::testParallelExtraction(circuit, benchmarkName + "_seq", false, config);
                 averageData.mergeData(executionData);
             }
             averageData.finish();
 
+            config.parallel_allow_claimed_vertices_for_cnot = false;
             averageData.measurement_group = benchmarkName + "_par";
             for(int i = 0; i < benchmarkIterations; i++) { 
-                BenchmarkData executionData = zx::testParallelExtraction(circuit, benchmarkName + "_par", true, "noClaim");
+                BenchmarkData executionData = zx::testParallelExtraction(circuit, benchmarkName + "_par", true, config);
                 averageData.mergeData(executionData);
             }
             averageData.finish();
 
+            config.parallel_allow_claimed_vertices_for_cnot = true;
             averageData.measurement_group = benchmarkName + "_parFull";
             for(int i = 0; i < benchmarkIterations; i++) { 
-                BenchmarkData executionData = zx::testParallelExtraction(circuit, benchmarkName + "_parFull", true, "full");
+                BenchmarkData executionData = zx::testParallelExtraction(circuit, benchmarkName + "_parFull", true, config);
                 averageData.mergeData(executionData);
             }
             averageData.finish();

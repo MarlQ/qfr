@@ -47,12 +47,26 @@
 
 
 namespace zx {
+
+    class ExtractorConfig {
+        public:
+            bool perm_optimization = true;
+            bool parallel_allow_claimed_vertices_for_cnot = true;
+            bool parallel_allow_cnot = true;
+    };
     
 
     class ExtractorParallel {
     public:
         ExtractorParallel(qc::QuantumComputation& circuit, ZXDiagram& diag, int thread_num, std::unordered_map<size_t, int>* claimed_vertices, Measurement measurement = Measurement(true));
         ExtractorParallel(qc::QuantumComputation& circuit, ZXDiagram& diag, Measurement measurement = Measurement(true));
+
+        void configure(const ExtractorConfig& config) {
+            perm_optimization = config.perm_optimization;
+            parallel_allow_claimed_vertices_for_cnot = config.parallel_allow_claimed_vertices_for_cnot;
+            parallel_allow_cnot = config.parallel_allow_cnot;
+        }
+
         ExtractorParallel* other_extractor;
         std::unordered_map<size_t, int>* claimed_vertices; // Vertices marked by the thread in parallel execution
         void printStatistics();
@@ -76,6 +90,8 @@ namespace zx {
 
         // Whether to use heuristic optimization for column order before gauss elim
         bool perm_optimization = false;
+        bool parallel_allow_claimed_vertices_for_cnot = true;
+        bool parallel_allow_cnot = true;
 
         // Time for extraction operations
         double time_extr_par_cnot = 0;
@@ -282,6 +298,6 @@ namespace zx {
 
     };
     
-    BenchmarkData testParallelExtraction(std::string circuitName="vbe_adder_3.qasm", std::string measurementGroup="1", bool parallelization=false, std::string featureSet="full", bool random=false, int randomQubits=0);
+    BenchmarkData testParallelExtraction(std::string circuitName="vbe_adder_3.qasm", std::string measurementGroup="1", bool parallelization=false, const ExtractorConfig& config = ExtractorConfig(), bool random=false, int randomQubits=0);
 
 } // namespace zx

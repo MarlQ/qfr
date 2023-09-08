@@ -161,13 +161,13 @@ namespace zx {
             if(DEBUG) THREAD_SAFE_PRINT( "Iteration " << i << " thread " << omp_get_thread_num() << std::endl);
             i++;
 
-            if(i % 10 == 0) {
+/*             if(i % 10 == 0) {
                 size_t currentVerts = diag.getNVertices(); 
                 float percentage = 100 - (((float) currentVerts) / ((float) originalVerts)) * 100;
                 std::cout << "Completion: " << percentage << "%" << std::endl;
-            }
+            } */
         };
-        std::cout << "El finito" <<std::endl;
+
         THREAD_SAFE_PRINT( "Finished extraction. Reversing circuit and finding swaps..." << std::endl);
 
         THREAD_SAFE_PRINT( "Inputs:" << std::endl);
@@ -321,11 +321,11 @@ namespace zx {
             if(DEBUG) THREAD_SAFE_PRINT( "Iteration " << iteration << " thread " << omp_get_thread_num() << std::endl);
             
             iteration++;
-            if(iteration % 10 == 0) {
+/*             if(iteration % 10 == 0) {
                 size_t currentVerts = diag.getNVertices(); 
                 float percentage = 100 - (((float) currentVerts) / ((float) originalVerts)) * 100;
-                //std::cout << "Completion: " << percentage << "%" << std::endl;
-            }
+                std::cout << "Completion: " << percentage << "%" << std::endl;
+            } */
 
             if( parallelize && (interrupted_cnot == 1 ||  interrupted_processing || other_extractor->isFinished())) {
                 a = omp_get_wtime();
@@ -336,7 +336,7 @@ namespace zx {
                 if(DEBUG) THREAD_SAFE_PRINT( "Thread " << thread_num << " was interrupted! ------------------------------------------------------------------------" << std::endl);
 
                 finished.store(true, std::memory_order::memory_order_relaxed);
-                std::cout << "K THX BYE " << interrupted_cnot << std::endl;
+                //std::cout << "K THX BYE " << interrupted_cnot << std::endl;
                 return iteration;
             }
             
@@ -582,6 +582,7 @@ namespace zx {
 
     int ExtractorParallel::extractCNOT() {
 
+        if(parallelize && !parallel_allow_cnot) return 1;
         THREAD_SAFE_PRINT( "Is CNOT extraction necessary?" << std::endl);
 
         std::vector<zx::Vertex> frontier_values;
@@ -592,7 +593,9 @@ namespace zx {
         // Get frontier neighbors and check at the same time
         ////auto //begin = std::chrono::steady_clock::now();
         auto a = omp_get_wtime();
-        bool cnot_necessary = parallelize ? get_frontier_neighbors_parallel(&frontier_values)  : get_frontier_neighbors();
+        bool cnot_necessary = parallelize ? 
+            (parallel_allow_claimed_vertices_for_cnot ? get_frontier_neighbors_parallel(&frontier_values) : get_frontier_neighbors_parallel_new()) 
+            : get_frontier_neighbors();
         if(!cnot_necessary) {
             THREAD_SAFE_PRINT( "No need for CNOT extraction. " << std::endl);
             return 0;
@@ -643,6 +646,7 @@ namespace zx {
             adjMatrix = getAdjacencyMatrix(frontier_values, neighbors2);
             THREAD_SAFE_PRINT( "New Adjacency Matrix:" << std::endl);
             //if(DEBUG)printMatrix(adjMatrix);
+            
         }
         b = omp_get_wtime();
         time_cnot_optimal += (b - a) * 1000.0;
@@ -685,7 +689,7 @@ namespace zx {
         //begin = std::chrono::steady_clock::now();
         if (!singleOneRowExists) {
             THREAD_SAFE_PRINT( "Ws is 0" << std::endl);
-            std::cout << "WS IS 0" << std::endl;
+            //std::cout << "WS IS 0" << std::endl;
 
             /* if(!parallelize) exit(0);
             
@@ -696,13 +700,13 @@ namespace zx {
             if(parallelize) return 1;
             bool yzFound = false;
 
-            printVector(frontier);
-            printVector(other_extractor->frontier);
-            printMatrix(adjMatrix);
-            printVector(rowOperations);
-            diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test1.json", mapToVector(frontier));
-            (other_extractor->diag).toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(other_extractor->frontier));
-            exit(0);
+            //printVector(frontier);
+            //printVector(other_extractor->frontier);
+            //printMatrix(adjMatrix);
+            //printVector(rowOperations);
+            //diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test1.json", mapToVector(frontier));
+            //(other_extractor->diag).toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(other_extractor->frontier));
+            //exit(0);
 
             // Extract YZ-spiders
             for (auto v: frontier_neighbors) {
@@ -758,13 +762,13 @@ namespace zx {
                                 THREAD_SAFE_PRINT( "Sanity 235"  << " == " << diag.isDeleted(235) << std::endl);
                                 if(diag.isDeleted(v)) {
                                     THREAD_SAFE_PRINT( "Was DELETED "  << v << std::endl);
-                                    diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(frontier));
+                                    //diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(frontier));
                                     exit(0);
                                 }
 
                                 if(diag.isDeleted(corresponding_frontier_vertex)) {
                                     THREAD_SAFE_PRINT( "Was DELETED "  << corresponding_frontier_vertex << std::endl);
-                                    diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(frontier));
+                                    //diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(frontier));
                                     exit(0);
                                 }
 
@@ -1735,7 +1739,7 @@ namespace zx {
 
     
 
-    BenchmarkData testParallelExtraction(std::string circuitName, std::string measurementGroup, bool parallelization, std::string featureSet, bool random, int randomQubits) {
+    BenchmarkData testParallelExtraction(std::string circuitName, std::string measurementGroup, bool parallelization, const ExtractorConfig& config, bool random, int randomQubits) {
         //std::cout << "Extraction testing" << std::endl;
         Measurement measurement;
 
@@ -1758,9 +1762,8 @@ namespace zx {
         //qc->dump("H:/Uni/Masterarbeit/pyzx/thesis/original.qasm");
         //std::cout << "ASd " << qc->getNops() << std::endl;
         //qc->printStatistics(std::cout);
-        if (DEBUG) std::cout << "Circuit to extract:" << std::endl;
+        //if (DEBUG) std::cout << "Circuit to extract:" << std::endl;
         //if (DEBUG) std::cout << qc << std::endl;
-        auto begin = std::chrono::steady_clock::now();
 
         zx::ZXDiagram zxDiag = zx::FunctionalityConstruction::buildFunctionality(qc.get());
 
@@ -1771,10 +1774,8 @@ namespace zx {
         //zxDiag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json");
 
         //std::cout << "Simplifying" << std::endl;
-        //zx::interiorCliffordSimp(zxDiag);
+        zx::interiorCliffordSimp(zxDiag);
         //zx::fullReduce(zxDiag);
-        auto end = std::chrono::steady_clock::now();
-        measurement.addMeasurement("simplification", begin, end);
 
 /* 
         auto vertNumAfter = zxDiag.getNVertices();
@@ -1791,8 +1792,8 @@ namespace zx {
         if(parallelization) {
             std::cout << "Starting parallel extraction" << std::endl;
 
-            //begin = std::chrono::steady_clock::now(); // Start measurement
-            auto a = omp_get_wtime();
+            auto begin = std::chrono::steady_clock::now(); // Start measurement
+            //auto a = omp_get_wtime();
 
             qc::QuantumComputation qc_extracted = qc::QuantumComputation(zxDiag.getNQubits());
             zx::ZXDiagram          zxDiag_reversed = zxDiag.reverse();
@@ -1802,6 +1803,8 @@ namespace zx {
 
             ExtractorParallel extractor1(qc_extracted, zxDiag, 0, &claimed_vertices, measurement);
             ExtractorParallel extractor2(qc_extracted_2, zxDiag_reversed, 1, &claimed_vertices, measurement);
+            extractor1.configure(config);
+            extractor2.configure(config);
             extractor1.circuit_name = circuitName;
             extractor2.circuit_name = circuitName;
             extractor1.measurement_group = measurementGroup;
@@ -1827,23 +1830,25 @@ namespace zx {
             //zxDiag_reversed.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(extractor1.frontier));
 
             // Extract rest
-            THREAD_SAFE_PRINT( "Finalizing extraction" << std::endl);
-            THREAD_SAFE_PRINT( "--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------" << std::endl);
-            THREAD_SAFE_PRINT( "--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------" << std::endl);
-            THREAD_SAFE_PRINT( "--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------" << std::endl);
+            //THREAD_SAFE_PRINT( "Finalizing extraction" << std::endl);
+            //THREAD_SAFE_PRINT( "--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------" << std::endl);
+            //THREAD_SAFE_PRINT( "--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------" << std::endl);
+            //THREAD_SAFE_PRINT( "--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------" << std::endl);
             /* extractor1.deleted_edges = extractor2.deleted_edges;
             extractor1.added_edges = extractor2.added_edges; */
             int iterations_seq = extractor1.finalizeExtraction(extractor2.frontier);
 
             // Combine diagrams
-            THREAD_SAFE_PRINT( "Combining diagrams" << std::endl);
+            //THREAD_SAFE_PRINT( "Combining diagrams" << std::endl);
             qc_extracted_2.combine(qc_extracted);
 
-            //end = std::chrono::steady_clock::now(); // End measurement
+            auto end = std::chrono::steady_clock::now(); // End measurement
             //measurement.addMeasurement("extract", begin, end);
 
-            auto b = omp_get_wtime();
-            extractor1.time_total += (b - a) * 1000.0;
+            //auto b = omp_get_wtime();
+            double duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+            //extractor1.time_total = (end - begin) * 1000.0;
+            extractor1.time_total = duration / 1000000.0;
 
             //qc_extracted.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted2.qasm");
 
@@ -1859,7 +1864,7 @@ namespace zx {
 
             float degree_of_parallelism = std::min(iterations_1, iterations_2) / iterations;
             extractor1.parallel_iterations = parallel_iterations;
-            extractor1.total_iterations = iterations_1 + iterations_2 + iterations_seq;
+            extractor1.total_iterations = iterations;
             extractor2.total_iterations = 0;
             extractor2.parallel_iterations = 0;
             //extractor1.printStatistics();
@@ -1873,19 +1878,22 @@ namespace zx {
         else {
             std::cout << "Starting non-parallel extraction" << std::endl;
 
-            //begin = std::chrono::steady_clock::now(); // Start measurement
-            auto a = omp_get_wtime();
+            auto begin = std::chrono::steady_clock::now(); // Start measurement
+            //auto a = omp_get_wtime();
 
             qc::QuantumComputation qc_extracted = qc::QuantumComputation(zxDiag.getNQubits());
             ExtractorParallel extractor1(qc_extracted, zxDiag, measurement);
+            extractor1.configure(config);
             extractor1.circuit_name = circuitName;
             extractor1.measurement_group = measurementGroup;
             iterations = extractor1.extract();
 
-            //end = std::chrono::steady_clock::now(); // End measurement
+            auto end = std::chrono::steady_clock::now(); // End measurement
             //measurement.addMeasurement("extract", begin, end);
-            auto b = omp_get_wtime();
-            extractor1.time_total += (b - a) * 1000.0;
+            //auto b = omp_get_wtime();
+            double duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+            //extractor1.time_total = (end - begin) * 1000.0;
+            extractor1.time_total = duration / 1000000.0;
             
             //std::cout << "Finished Circuit" << std::endl;
             //std::cout << qc_extracted << std::endl;
