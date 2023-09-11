@@ -53,6 +53,7 @@ namespace zx {
             bool perm_optimization = true;
             bool parallel_allow_claimed_vertices_for_cnot = true;
             bool parallel_allow_cnot = true;
+            bool parallel_frontier_processing = false;
     };
     
 
@@ -65,6 +66,7 @@ namespace zx {
             perm_optimization = config.perm_optimization;
             parallel_allow_claimed_vertices_for_cnot = config.parallel_allow_claimed_vertices_for_cnot;
             parallel_allow_cnot = config.parallel_allow_cnot;
+            parallel_frontier_processing = config.parallel_frontier_processing;
         }
 
         ExtractorParallel* other_extractor;
@@ -92,6 +94,7 @@ namespace zx {
         bool perm_optimization = false;
         bool parallel_allow_claimed_vertices_for_cnot = true;
         bool parallel_allow_cnot = true;
+        bool parallel_frontier_processing = false;
 
         // Time for extraction operations
         double time_extr_par_cnot = 0;
@@ -131,6 +134,22 @@ namespace zx {
             return finished.load(std::memory_order::memory_order_relaxed);
         }   
 
+        int removeFromFrontier(size_t vert) {
+            zx::Qubit qubit = -1;
+
+            for (auto it = frontier.begin(); it != frontier.end(); ++it) {
+                if(it->second == vert) {
+                    qubit = it->first;
+                    break;
+                }
+            }
+            if(qubit >= 0) {
+                frontier.erase(qubit);
+            }
+
+            return qubit;
+        }
+
         BenchmarkData ExtractorParallel::createBenchmarkData() {
             BenchmarkData data;
 
@@ -167,6 +186,7 @@ namespace zx {
         
 
     private:
+        omp_lock_t lock;
         qc::QuantumComputation& circuit;
         ZXDiagram& diag;
         Measurement measurement;
@@ -216,6 +236,7 @@ namespace zx {
 
         void claimOutputs();
         bool claim(size_t vertex);
+        void forceClaim(size_t vertex);
         bool isClaimed(size_t vertex);
         bool isClaimedBySelf(size_t vertex);
         bool isClaimedAnother(size_t vertex);
@@ -224,9 +245,9 @@ namespace zx {
 
         void printVector(std::vector<size_t> vec) {
         for(auto const& v : vec) {
-            THREAD_SAFE_PRINT_2( v << " ,");
+            THREAD_SAFE_PRINT( v << " ,");
         }
-        THREAD_SAFE_PRINT_2( std::endl);
+        THREAD_SAFE_PRINT( std::endl);
     }
 
     void printVector(std::vector<dd::Qubit> vec) {
@@ -251,9 +272,9 @@ namespace zx {
     }
     void printVector(std::map<zx::Qubit, zx::Vertex> vec) {
         for(auto const& v : vec) {
-            THREAD_SAFE_PRINT_2( v.first << " : " << v.second << " ,");
+            THREAD_SAFE_PRINT( v.first << " : " << v.second << " ,");
         }
-        THREAD_SAFE_PRINT_2( std::endl);
+        THREAD_SAFE_PRINT( std::endl);
     }
     void printVector(std::map<zx::Vertex, zx::Vertex> vec) {
         for(auto const& v : vec) {
@@ -270,16 +291,16 @@ namespace zx {
 
     void printVector(std::vector<bool> vec) {
         for(auto const& v : vec) {
-            THREAD_SAFE_PRINT_2( v << " ,");
+            THREAD_SAFE_PRINT( v << " ,");
         }
-        THREAD_SAFE_PRINT_2( std::endl);
+        THREAD_SAFE_PRINT( std::endl);
     }
 
     void printVector(std::vector<std::pair<int, int>> vec) {
         for(auto const& v : vec) {
-            THREAD_SAFE_PRINT_2( "(" << v.first << "," << v.second << ") ,");
+            THREAD_SAFE_PRINT( "(" << v.first << "," << v.second << ") ,");
         }
-        THREAD_SAFE_PRINT_2( std::endl);
+        THREAD_SAFE_PRINT( std::endl);
     }
 
     void printVector(std::set<std::pair<zx::Vertex, zx::Vertex>> vec) {
@@ -293,7 +314,7 @@ namespace zx {
         for(auto const& row : matrix) {
             printVector(row);
         }
-        THREAD_SAFE_PRINT_2( std::endl);
+        THREAD_SAFE_PRINT( std::endl);
     }
 
     };

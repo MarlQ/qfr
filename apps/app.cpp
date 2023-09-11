@@ -30,57 +30,71 @@ int main(int argc, char** argv) {
     std::cout << "Starting App" << std::endl;
 
     std::vector<std::string> circuits = {
+        "circuits\\large\\adder_n28\\adder_n28.qasm",
+        "circuits\\large\\adder_n64\\adder_n64.qasm",
+        "circuits\\large\\adder_n118\\adder_n118.qasm",
         "circuits\\pyzx\\barenco_tof_5.qasm",
         "circuits\\pyzx\\barenco_tof_10.qasm",
+        "circuits\\large\\bv_n30\\bv_n30.qasm",
+        "circuits\\large\\bv_n70\\bv_n70.qasm",
+        "circuits\\large\\cat_n35\\cat_n35.qasm",
+        "circuits\\large\\cat_n65\\cat_n65.qasm",
         "circuits\\pyzx\\gf2^10_mult.qasm",
         "circuits\\pyzx\\gf2^16_mult.qasm",
-        "circuits\\pyzx\\gf2^32_mult.qasm",
+        "circuits\\pyzx\\gf2^32_mult.qasm", 
+        "circuits\\large\\ghz_n40\\ghz_n40.qasm",
+        "circuits\\large\\ghz_n78\\ghz_n78.qasm",
+        "circuits\\large\\ghz_n127\\ghz_n127.qasm",
         "circuits\\pyzx\\ham15-low.qasm",
         "circuits\\pyzx\\ham15-med.qasm",
         "circuits\\pyzx\\ham15-high.qasm",
+        "circuits\\small\\hhl_n7\\hhl_n7.qasm",
+        "circuits\\small\\hhl_n10\\hhl_n10.qasm",
         "circuits\\pyzx\\hwb6.qasm",
         "circuits\\pyzx\\hwb8.qasm",
         "circuits\\pyzx\\hwb10.qasm",
         "circuits\\pyzx\\hwb12.qasm",
         "circuits\\pyzx\\mod_adder_1024.qasm",
+        "circuits\\large\\multiplier_n45\\multiplier_n45.qasm",
+        "circuits\\large\\multiplier_n75\\multiplier_n75.qasm",
+        "circuits\\large\\qft_n29\\qft_n29.qasm",
+        "circuits\\large\\qft_n63\\qft_n63.qasm",
+        "circuits\\medium\\qram_n20\\qram_n20.qasm", 
+        "circuits\\large\\qugan_n39\\qugan_n39_transpiled.qasm",
+        "circuits\\large\\qugan_n71\\qugan_n71_transpiled.qasm",
+        "circuits\\large\\qugan_n111\\qugan_n111_transpiled.qasm",
         "circuits\\pyzx\\vbe_adder_3.qasm",
-        "circuits/large/adder_n28/adder_n28.qasm",
-        "circuits/large/adder_n64/adder_n64.qasm",
-        "circuits/large/adder_n118/adder_n118.qasm",
-        "circuits/large/bv_n30/bv_n30.qasm",
-        "circuits/large/bv_n70/bv_n70.qasm",
-        "circuits/large/cat_n35/cat_n35.qasm",
-        "circuits/large/cat_n65/cat_n65.qasm",
-        "circuits/large/ghz_n40/ghz_n40.qasm",
-        "circuits/large/ghz_n78/ghz_n78.qasm",
-        "circuits/large/ghz_n127/ghz_n127.qasm",
-        "circuits/small/hhl_n7/hhl_n7.qasm",
-        "circuits/small/hhl_n10/hhl_n10.qasm",
-        "circuits/large/multiplier_n45/multiplier_n45.qasm",
-        "circuits/large/multiplier_n75/multiplier_n75.qasm",
-        "circuits/large/qft_n29/qft_n29.qasm",
-        "circuits/large/qft_n63/qft_n63.qasm",
-        "circuits/medium/qram_n20/qram_n20.qasm",
-        "circuits/large/qugan_n39/qugan_n39.qasm",
-        "circuits/large/qugan_n71/qugan_n71.qasm",
-        "circuits/large/qugan_n111/qugan_n111.qasm",
-        "circuits/small/vqe_uccsd_n4/vqe_uccsd_n4.qasm",
-        "circuits/small/vqe_uccsd_n6/vqe_uccsd_n6.qasm",
-        "circuits/small/vqe_uccsd_n8/vqe_uccsd_n8.qasm",
-        "circuits/large/wstate_n36/wstate_n36.qasm",
-        "circuits/large/wstate_n76/wstate_n76.qasm",
-        "circuits/large/wstate_n118/wstate_n118.qasm",
+        "circuits\\small\\vqe_uccsd_n4\\vqe_uccsd_n4_transpiled.qasm",
+        "circuits\\small\\vqe_uccsd_n6\\vqe_uccsd_n6_transpiled.qasm",
+        "circuits\\small\\vqe_uccsd_n8\\vqe_uccsd_n8_transpiled.qasm",
+        "circuits\\large\\wstate_n36\\wstate_n36_transpiled.qasm",
+        "circuits\\large\\wstate_n76\\wstate_n76_transpiled.qasm",
+        "circuits\\large\\wstate_n118\\wstate_n118_transpiled.qasm",
     };
     bool benchmark = true;
     int benchmarkIterations = 20;
-    std::string benchmarkName = "benchmark_6";
+    std::string benchmarkName = "benchmark_11";
     if(benchmark) {
         zx::ExtractorConfig config;
+        config.perm_optimization = true;
+        int counter = 1;
         for(std::string circuit : circuits) {
+            std::cout << "Benchmark " << counter << " / " << circuits.size() << " (" << circuit <<")" << std::endl;
+
+/*             std::unique_ptr<qc::QuantumComputation> qc = std::make_unique<qc::QuantumComputation>();
+            qc->import("H:/Uni/Masterarbeit/qcec/" + circuit);
+            zx::ZXDiagram zxDiag = zx::FunctionalityConstruction::buildFunctionality(qc.get());
+            zxDiag.toGraphlike();
+            zx::interiorCliffordSimp(zxDiag);
+            std::string filename = "H:\\Uni\\Masterarbeit\\pyzx\\thesis\\" + circuit + ".json";
+            std::cout << "Writing to " << filename << std::endl;
+
+            zxDiag.toJSON(filename);
+            continue; */
 
             BenchmarkData averageData;
             averageData.circuit_name = circuit;
-
+            std::cout << "Testing sewq" << std::endl;
             averageData.measurement_group = benchmarkName + "_seq";
             for(int i = 0; i < benchmarkIterations; i++) {
                 BenchmarkData executionData = zx::testParallelExtraction(circuit, benchmarkName + "_seq", false, config);
@@ -88,7 +102,15 @@ int main(int argc, char** argv) {
             }
             averageData.finish();
 
-            config.parallel_allow_claimed_vertices_for_cnot = false;
+/*             config.parallel_allow_claimed_vertices_for_cnot = false;
+            averageData.measurement_group = benchmarkName + "_par";
+            for(int i = 0; i < benchmarkIterations; i++) { 
+                BenchmarkData executionData = zx::testParallelExtraction(circuit, benchmarkName + "_par", true, config);
+                averageData.mergeData(executionData);
+            }
+            averageData.finish(); */
+            std::cout << "Testing par" << std::endl;
+            config.parallel_frontier_processing = false;
             averageData.measurement_group = benchmarkName + "_par";
             for(int i = 0; i < benchmarkIterations; i++) { 
                 BenchmarkData executionData = zx::testParallelExtraction(circuit, benchmarkName + "_par", true, config);
@@ -96,13 +118,15 @@ int main(int argc, char** argv) {
             }
             averageData.finish();
 
-            config.parallel_allow_claimed_vertices_for_cnot = true;
-            averageData.measurement_group = benchmarkName + "_parFull";
+            std::cout << "Testing new" << std::endl;
+            config.parallel_frontier_processing = true;
+            averageData.measurement_group = benchmarkName + "_parFP";
             for(int i = 0; i < benchmarkIterations; i++) { 
-                BenchmarkData executionData = zx::testParallelExtraction(circuit, benchmarkName + "_parFull", true, config);
+                BenchmarkData executionData = zx::testParallelExtraction(circuit, benchmarkName + "_parFP", true, config);
                 averageData.mergeData(executionData);
             }
             averageData.finish();
+            counter++;
         }
         return 0;
     }

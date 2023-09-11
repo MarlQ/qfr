@@ -3,6 +3,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <algorithm>
 
 class BenchmarkData {
 public:
@@ -45,32 +46,32 @@ public:
 
         // Merge data from another BenchmarkData object and average the fields
     void averageData(const BenchmarkData& other) {
-        time_total = average(time_total, other.time_total);
-        parallel_iterations = average(parallel_iterations , other.parallel_iterations);
-        total_iterations = average(total_iterations , other.total_iterations);
-        time_extr_par_cnot = average(time_extr_par_cnot, other.time_extr_par_cnot);
-        time_extr_par_cz = average(time_extr_par_cz, other.time_extr_par_cz);
-        time_extr_par_fp = average(time_extr_par_fp, other.time_extr_par_fp);
-        time_extr_seq_cnot = average(time_extr_seq_cnot, other.time_extr_seq_cnot);
-        time_extr_seq_cz = average(time_extr_seq_cz, other.time_extr_seq_cz);
-        time_extr_seq_fp = average(time_extr_seq_fp, other.time_extr_seq_fp);
-        time_cnot_failed_extraction = average(time_cnot_failed_extraction, other.time_cnot_failed_extraction);
-        time_cnot_gauss = average(time_cnot_gauss, other.time_cnot_gauss);
-        time_cnot_biadj = average(time_cnot_biadj, other.time_cnot_biadj);
-        time_cnot_optimal = average(time_cnot_optimal, other.time_cnot_optimal);
-        time_cnot_neighbors = average(time_cnot_neighbors, other.time_cnot_neighbors);
-        num_extr_par_cnot = average(num_extr_par_cnot , other.num_extr_par_cnot);
-        num_extr_par_cz = average(num_extr_par_cz , other.num_extr_par_cz);
-        num_extr_par_fp = average(num_extr_par_fp , other.num_extr_par_fp);
-        num_extr_seq_cnot = average(num_extr_seq_cnot , other.num_extr_seq_cnot);
-        num_extr_seq_cz = average(num_extr_seq_cz , other.num_extr_seq_cz);
-        num_extr_seq_fp = average(num_extr_seq_fp , other.num_extr_seq_fp);
-        failedCnots = average(failedCnots , other.failedCnots);
-        num_gates_cnot = average(num_gates_cnot , other.num_gates_cnot);
-        num_gates_cz = average(num_gates_cz , other.num_gates_cz);
-        num_gates_phase = average(num_gates_phase , other.num_gates_phase);
-        num_gates_h = average(num_gates_h , other.num_gates_h);
-        num_gates_swap = average(num_gates_swap , other.num_gates_swap);
+        time_total = (time_total + other.time_total);
+        parallel_iterations = (parallel_iterations + other.parallel_iterations);
+        total_iterations = (total_iterations + other.total_iterations);
+        time_extr_par_cnot = std::max(time_extr_par_cnot, other.time_extr_par_cnot);
+        time_extr_par_cz = std::max(time_extr_par_cz, other.time_extr_par_cz);
+        time_extr_par_fp = std::max(time_extr_par_fp, other.time_extr_par_fp);
+        time_extr_seq_cnot = (time_extr_seq_cnot+ other.time_extr_seq_cnot);
+        time_extr_seq_cz = (time_extr_seq_cz+ other.time_extr_seq_cz);
+        time_extr_seq_fp = (time_extr_seq_fp+ other.time_extr_seq_fp);
+        time_cnot_failed_extraction = std::max(time_cnot_failed_extraction,other.time_cnot_failed_extraction);
+        time_cnot_gauss = (time_cnot_gauss+ other.time_cnot_gauss);
+        time_cnot_biadj = (time_cnot_biadj+ other.time_cnot_biadj);
+        time_cnot_optimal = (time_cnot_optimal+ other.time_cnot_optimal);
+        time_cnot_neighbors = (time_cnot_neighbors+ other.time_cnot_neighbors);
+        num_extr_par_cnot = (num_extr_par_cnot + other.num_extr_par_cnot);
+        num_extr_par_cz = (num_extr_par_cz + other.num_extr_par_cz);
+        num_extr_par_fp = (num_extr_par_fp + other.num_extr_par_fp);
+        num_extr_seq_cnot = (num_extr_seq_cnot + other.num_extr_seq_cnot);
+        num_extr_seq_cz = (num_extr_seq_cz + other.num_extr_seq_cz);
+        num_extr_seq_fp = (num_extr_seq_fp + other.num_extr_seq_fp);
+        failedCnots = (failedCnots + other.failedCnots);
+        num_gates_cnot = (num_gates_cnot + other.num_gates_cnot);
+        num_gates_cz = (num_gates_cz + other.num_gates_cz);
+        num_gates_phase = (num_gates_phase + other.num_gates_phase);
+        num_gates_h = (num_gates_h + other.num_gates_h);
+        num_gates_swap = (num_gates_swap + other.num_gates_swap);
     }
 
     void mergeData(const BenchmarkData& other) {
@@ -101,11 +102,40 @@ public:
         num_gates_phase = (num_gates_phase + other.num_gates_phase);
         num_gates_h = (num_gates_h + other.num_gates_h);
         num_gates_swap = (num_gates_swap + other.num_gates_swap);
+        //time_totals.emplace_back(other.time_total);
+
+        //time_total = std::min(time_total, other.time_total);
+/*         parallel_iterations = std::min(parallel_iterations , other.parallel_iterations);
+        total_iterations = std::min(total_iterations , other.total_iterations);
+        time_extr_par_cnot = std::min(time_extr_par_cnot, other.time_extr_par_cnot);
+        time_extr_par_cz = std::min(time_extr_par_cz, other.time_extr_par_cz);
+        time_extr_par_fp = std::min(time_extr_par_fp, other.time_extr_par_fp);
+        time_extr_seq_cnot = std::min(time_extr_seq_cnot, other.time_extr_seq_cnot);
+        time_extr_seq_cz = std::min(time_extr_seq_cz, other.time_extr_seq_cz);
+        time_extr_seq_fp = std::min(time_extr_seq_fp, other.time_extr_seq_fp);
+        time_cnot_failed_extraction = std::min(time_cnot_failed_extraction, other.time_cnot_failed_extraction);
+        time_cnot_gauss = std::min(time_cnot_gauss, other.time_cnot_gauss);
+        time_cnot_biadj = std::min(time_cnot_biadj, other.time_cnot_biadj);
+        time_cnot_optimal = std::min(time_cnot_optimal, other.time_cnot_optimal);
+        time_cnot_neighbors = std::min(time_cnot_neighbors, other.time_cnot_neighbors);
+        num_extr_par_cnot = std::min(num_extr_par_cnot , other.num_extr_par_cnot);
+        num_extr_par_cz = std::min(num_extr_par_cz , other.num_extr_par_cz);
+        num_extr_par_fp = std::min(num_extr_par_fp , other.num_extr_par_fp);
+        num_extr_seq_cnot = std::min(num_extr_seq_cnot , other.num_extr_seq_cnot);
+        num_extr_seq_cz = std::min(num_extr_seq_cz , other.num_extr_seq_cz);
+        num_extr_seq_fp = std::min(num_extr_seq_fp , other.num_extr_seq_fp);
+        failedCnots = std::min(failedCnots , other.failedCnots);
+        num_gates_cnot = std::min(num_gates_cnot , other.num_gates_cnot);
+        num_gates_cz = std::min(num_gates_cz , other.num_gates_cz);
+        num_gates_phase = std::min(num_gates_phase , other.num_gates_phase);
+        num_gates_h = std::min(num_gates_h , other.num_gates_h);
+        num_gates_swap = std::min(num_gates_swap , other.num_gates_swap); */
+        
     }
 
-    void printStatistics() {
+    void printStatistics() { 
         // Print the statistics
-        std::cout << "-----------------------------------------------" << std::endl;
+/*         std::cout << "-----------------------------------------------" << std::endl;
 
         std::cout << "// Time for extraction operations" << std::endl;
         std::cout << "time_extr_par_cnot = " << time_extr_par_cnot  << std::endl;
@@ -141,7 +171,7 @@ public:
         std::cout << "num_gates_cz = " << num_gates_cz  << std::endl;
         std::cout << "num_gates_phase = " << num_gates_phase  << std::endl;
         std::cout << "num_gates_h = " << num_gates_h  << std::endl;
-        std::cout << "num_gates_swap = " << num_gates_swap  << std::endl;
+        std::cout << "num_gates_swap = " << num_gates_swap  << std::endl; */
 
 
         // Write the output to a CSV file
@@ -288,4 +318,18 @@ private:
     int average(int a, int b) {
         return (a+b)/2;
     }
+
+/*     int median(std::vector<int> &v) {
+        size_t n = v.size() / 2;
+        std::nth_element(v.begin(), v.begin()+n, v.end());
+        return v[n];
+    }
+
+    double median(std::vector<double> &v) {
+        size_t n = v.size() / 2;
+        std::nth_element(v.begin(), v.begin()+n, v.end());
+        return v[n];
+    }
+
+    std::vector<double> time_totals; */
 };

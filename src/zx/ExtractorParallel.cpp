@@ -61,6 +61,7 @@ namespace zx {
     ExtractorParallel::ExtractorParallel(qc::QuantumComputation& circuit, ZXDiagram& diag, int thread_num, std::unordered_map<size_t, int>* claimed_vertices, Measurement measurement):
         circuit(circuit), diag(diag), thread_num(thread_num), claimed_vertices(claimed_vertices), measurement(measurement), inputs(diag.getInputs()), outputs(diag.getOutputs()) {
         claimOutputs();
+        omp_init_lock(&lock);
     };
 
 
@@ -115,7 +116,6 @@ namespace zx {
                 diag.removeEdge(v,w);
             }
         }
-
         for (const auto& entry : other_extractor->added_edges) {
             size_t v = entry.first;
             const std::unordered_set<size_t>& added_neighbors = entry.second;
@@ -132,7 +132,6 @@ namespace zx {
                 }
             }
         }
-        //diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(frontier));
         THREAD_SAFE_PRINT( "Preparation finished." << std::endl);
 
         THREAD_SAFE_PRINT( "Inputs:" << std::endl);
@@ -141,6 +140,7 @@ namespace zx {
         THREAD_SAFE_PRINT( "Outputs:" << std::endl);
         if(DEBUG)printVector(outputs);
         size_t originalVerts = diag.getNVertices(); 
+        size_t previousVerts = originalVerts;
         int i = 0;
         while (frontier.size() > 0) {
             auto a = omp_get_wtime();
@@ -152,7 +152,6 @@ namespace zx {
             extractCNOT();
             b = omp_get_wtime();
             time_extr_seq_cnot += (b - a) * 1000.0;
-
             a = omp_get_wtime();
             processFrontier();
             b = omp_get_wtime();
@@ -165,6 +164,13 @@ namespace zx {
                 size_t currentVerts = diag.getNVertices(); 
                 float percentage = 100 - (((float) currentVerts) / ((float) originalVerts)) * 100;
                 std::cout << "Completion: " << percentage << "%" << std::endl;
+                 if(currentVerts <= previousVerts) {
+                    std::cout << "STUCK " << currentVerts << " | " << previousVerts << std::endl;
+                    diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test1.json", mapToVector(frontier));
+                    other_extractor->diag.toJSON("H:\\Uni\\Masterarbeit\\pyzx\\thesis\\test2.json", mapToVector(other_extractor->frontier));
+                    exit(0);
+                }
+                previousVerts = currentVerts;
             } */
         };
 
@@ -188,7 +194,6 @@ namespace zx {
         THREAD_SAFE_PRINT( std::endl);
 
         // Find swap gates
-        // TODO: Measure time
         std::map<int, int> swaps;
         bool               leftover_swaps = false;
 
@@ -258,15 +263,23 @@ namespace zx {
 
     int ExtractorParallel::extract() {
         THREAD_SAFE_PRINT( "Extractor " << omp_get_thread_num() << " started!" << std::endl);
+        if(parallelize && parallel_frontier_processing) {
+            omp_set_lock(&lock);
+        }
         initFrontier();
         size_t originalVerts = diag.getNVertices(); 
 
         extractOutputHadamards();
 
         iteration = 1; // Iteration counter. For debugging only.
-
+        if(parallelize && parallel_frontier_processing) {
+            omp_unset_lock(&lock);
+        }
         while (frontier.size() > 0) {
             ////auto //begin = std::chrono::steady_clock::now();
+            if(parallelize && parallel_frontier_processing) {
+                omp_set_lock(&lock);
+            }
             auto a = omp_get_wtime();
             extractRZ_CZ();
             auto b = omp_get_wtime();
@@ -287,7 +300,6 @@ namespace zx {
             if(DEBUG)printVector(neighbors);
         } */ 
 
-
             
             
 
@@ -307,10 +319,16 @@ namespace zx {
             else time_extr_seq_cnot += (b - a) * 1000.0;
             if(X > 0.0) time_cnot_failed_extraction += (b - X) * 1000.0;
 
+            if(parallelize && parallel_frontier_processing) {
+                omp_unset_lock(&lock);
+            }
+
             //end = std::chrono::steady_clock::now();
             //measurement.addMeasurement("extract:extractCNOT", begin, end);
-
             //begin = std::chrono::steady_clock::now();
+            if(parallelize && parallel_frontier_processing) {
+                omp_set_lock(&lock);
+            }
             a = omp_get_wtime();
             bool interrupted_processing = !processFrontier();
             b = omp_get_wtime();
@@ -326,6 +344,10 @@ namespace zx {
                 float percentage = 100 - (((float) currentVerts) / ((float) originalVerts)) * 100;
                 std::cout << "Completion: " << percentage << "%" << std::endl;
             } */
+
+            if(parallelize && parallel_frontier_processing) {
+                omp_unset_lock(&lock);
+            }
 
             if( parallelize && (interrupted_cnot == 1 ||  interrupted_processing || other_extractor->isFinished())) {
                 a = omp_get_wtime();
@@ -1136,8 +1158,81 @@ namespace zx {
                 for (auto n: current_neighbors) {
                     if (n != previous_vertex) {
                         if(parallelize) {
-                            if(!claim(n)) continue;
+                            if(parallel_frontier_processing) {
+                                if(!claim(n)) { // Take the other thread's frontier vertex
+                                    if(thread_num == 1) continue; // FIXME:
+                                    omp_set_lock(&(other_extractor->lock));
+                                    int qb = other_extractor->removeFromFrontier(n);
+                                    
+                                    if(qb >= 0) { // Take it
+                                        //std::cout << "From " << v.second << " (" << v.first << ")" << std::endl;
+                                        //std::cout << "Stole " << n << " (" << qb << ")" << std::endl; 
+                                        forceClaim(n);
+                                        auto neighbors = diag.getNeighborVertices(n);
+
+                                        for(auto w : neighbors) {
+                                            if(isClaimedAnother(w)) {
+                                                diag.removeEdge(n, w);
+                                                //std::cout << "Removed (" << n << " " << w << ")" << std::endl;
+                                            }
+                                        }
+
+                                        // Then add a simple connection to the appropriate input vertex
+                                        auto input_vert = inputs[qb];
+                                        if(!diag.connected(n, input_vert)) {
+                                            diag.addEdge(n, input_vert);    
+                                            //std::cout << "Added (" << n << " " << input_vert << ")" << std::endl; 
+                                        }
+
+
+                                        // Remove phase
+                                        if (!diag.phase(n).isZero()) {
+                                            diag.setPhase(n, PiExpression());
+                                        } 
+
+
+                                        for(auto e : other_extractor->deleted_edges) {
+                                            for(auto to : e.second) {
+                                                //if(to == n) {
+                                                    THREAD_SAFE_PRINT( "Removed edge " << e.first << " , " << to << std::endl);
+                                                    diag.removeEdge(e.first, to);
+                                                    //std::cout << "RRemoved (" << e.first << " " << to << ")" << std::endl;
+                                                //}
+
+                                            }
+
+                                        }
+
+                                        for(auto e : other_extractor->added_edges) {
+                                            for(auto to : e.second) {
+                                                //if(to == n) {
+                                                    THREAD_SAFE_PRINT( "Added edge " << e.first << " , " << to << std::endl);
+                                                    if(!diag.connected(e.first, to)) {
+                                                        diag.addEdge(e.first, to, EdgeType::Hadamard);
+                                                        //std::cout << "AAdded (" << e.first << " " << to << ")" << std::endl; 
+                                                    }
+                                                //}
+                                            }
+                                        }
+
+                                        // Delete changes from array
+                                        other_extractor->added_edges.clear();
+                                        other_extractor->deleted_edges.clear();
+
+                                        omp_unset_lock(&(other_extractor->lock)); // I believe I can't do this earlier, because then the other thread might think the vertex is up for grabs
+                                    }
+                                    else {
+                                        omp_unset_lock(&(other_extractor->lock));
+                                        continue; // Was not a frontier vertex
+                                    }
+                                }
+                                
+                            }
+                            else {
+                                if(!claim(n)) continue;
+                            }
                         }
+                        
                         next_vertex = n;
                         found_neighbor = true;
                         break;
@@ -1181,11 +1276,11 @@ namespace zx {
             }
             THREAD_SAFE_PRINT( "Chain found:" << std::endl);
             if(DEBUG)printVector(chain);
-
+            
             for (unsigned int i = 0; i < chain.size() - 1; i++) {
                 THREAD_SAFE_PRINT( "Removing Vertex: " << chain[i] << std::endl);
                 diag.removeVertex(chain[i]);
-                if(parallelize) { // Vertex will be behind the frontier. We no longer need to store edge information about it.
+                if(parallelize/*  && parallel_allow_cnot && parallel_allow_claimed_vertices_for_cnot */) { // Vertex will be behind the frontier. We no longer need to store edge information about it.
                     THREAD_SAFE_PRINT( "Deleting entry " << chain[i] << std::endl);
                     #pragma omp critical(cnot) 
                     {
@@ -1194,7 +1289,6 @@ namespace zx {
                     }
                 }
             }
-
             auto edgeType      = diag.getEdge(v.second, output)->type; //CHECK: isn't this always Simple, as we removed hadamards at the start?
             auto last_in_chain = chain[chain.size() - 1];
             //auto v_qubit = v.first;
@@ -1204,8 +1298,7 @@ namespace zx {
             THREAD_SAFE_PRINT( "Adding Edge: (" << last_in_chain << "," << output << ")" << std::endl);
             diag.addEdge(last_in_chain, output, edgeType);
 
-
-            if(parallelize) { // Vertex will be in the frontier. We no longer need to store edge information about it.
+            if(parallelize /* && parallel_allow_cnot && parallel_allow_claimed_vertices_for_cnot */) { // Vertex will be in the frontier. We no longer need to store edge information about it.
                 THREAD_SAFE_PRINT( "Deleting entry " << last_in_chain << std::endl);
                 #pragma omp critical(cnot) 
                 {
@@ -1650,22 +1743,25 @@ namespace zx {
 
     // [CRITICAL] Checks whether a vertex has been claimed by the current thread
     bool ExtractorParallel::isClaimedBySelf(size_t vertex) {
+        bool isClaimed = false;
         #pragma omp critical(claim)
         {
             auto it = claimed_vertices->find(vertex);
             if (it != claimed_vertices->end() && it->second == thread_num) {
-                return true;
+                isClaimed = true;
             }
-            return false;
         }
+        return isClaimed;
     }
 
     // [CRITICAL] Checks whether the vertex has been claimed by any thread
     bool ExtractorParallel::isClaimed(size_t vertex) {
+        bool isClaimed = false;
         #pragma omp critical(claim)
         {
-            return (claimed_vertices->count(vertex) != 0);
+            isClaimed = (claimed_vertices->count(vertex) != 0);
         }
+        return isClaimed;
     }
 
     // [CRITICAL] Tries to claim a vertex with the current thread. 
@@ -1673,28 +1769,51 @@ namespace zx {
     // or false if it was already claimed.
     bool ExtractorParallel::claim(size_t vertex) {
         if(!parallelize) return true;
+        bool success = true;
         #pragma omp critical(claim)
         {
             auto it = claimed_vertices->find(vertex);
             if(it != claimed_vertices->end() && it->second != thread_num) {
                 THREAD_SAFE_PRINT( thread_num << ": Failed to claim vertex " << vertex << std::endl);
-                return false;
+                success = false;
             }
-            claimed_vertices->emplace(vertex, thread_num);
+            if(success) {
+                claimed_vertices->emplace(vertex, thread_num);
+                THREAD_SAFE_PRINT( thread_num << ": Successfully claimed vertex " << vertex << std::endl);
+            }
+            
+        }
+        return success;
+    }
+
+    void ExtractorParallel::forceClaim(size_t vertex) {
+        if(!parallelize) return;
+        #pragma omp critical(claim)
+        {
+            (*claimed_vertices)[vertex] = thread_num;
             THREAD_SAFE_PRINT( thread_num << ": Successfully claimed vertex " << vertex << std::endl);
-            return true;
         }
     }
 
     // [CRITICAL] Checks whether a vertex has been claimed by another thread
     bool ExtractorParallel::isClaimedAnother(size_t vertex) {  
-        #pragma omp critical(claim)
-        {
+        if(!parallelize) {
             auto it = claimed_vertices->find(vertex);
             if (it != claimed_vertices->end() && it->second != thread_num) {
                 return true;
             }
             return false;
+        }
+        else {
+            bool claimed = false;
+            #pragma omp critical(claim)
+            {
+                auto it = claimed_vertices->find(vertex);
+                if (it != claimed_vertices->end() && it->second != thread_num) {
+                    claimed = true;
+                }
+            }
+            return claimed;
         }
     }
 
@@ -1737,8 +1856,6 @@ namespace zx {
         return convertedInputs;
     }
 
-    
-
     BenchmarkData testParallelExtraction(std::string circuitName, std::string measurementGroup, bool parallelization, const ExtractorConfig& config, bool random, int randomQubits) {
         //std::cout << "Extraction testing" << std::endl;
         Measurement measurement;
@@ -1754,7 +1871,7 @@ namespace zx {
         }
         else {
             qc = std::make_unique<qc::QuantumComputation>();
-            std::cout << "Circuit " << circuitName << ":" << std::endl;
+            //std::cout << "Circuit " << circuitName << ":" << std::endl;
             qc->import("H:/Uni/Masterarbeit/qcec/" + circuitName);
         }
         
@@ -1790,10 +1907,10 @@ namespace zx {
         int parallel_iterations = 0;
         BenchmarkData data;
         if(parallelization) {
-            std::cout << "Starting parallel extraction" << std::endl;
+            //std::cout << "Starting parallel extraction" << std::endl;
 
-            auto begin = std::chrono::steady_clock::now(); // Start measurement
-            //auto a = omp_get_wtime();
+            //auto begin = std::chrono::steady_clock::now(); // Start measurement
+            auto a = omp_get_wtime();
 
             qc::QuantumComputation qc_extracted = qc::QuantumComputation(zxDiag.getNQubits());
             zx::ZXDiagram          zxDiag_reversed = zxDiag.reverse();
@@ -1845,10 +1962,8 @@ namespace zx {
             auto end = std::chrono::steady_clock::now(); // End measurement
             //measurement.addMeasurement("extract", begin, end);
 
-            //auto b = omp_get_wtime();
-            double duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
-            //extractor1.time_total = (end - begin) * 1000.0;
-            extractor1.time_total = duration / 1000000.0;
+            auto b = omp_get_wtime();
+            extractor1.time_total = (b - a) * 1000.0;
 
             //qc_extracted.dump("H:/Uni/Masterarbeit/pyzx/thesis/extracted2.qasm");
 
@@ -1876,10 +1991,10 @@ namespace zx {
             data.averageData(data2);
         }
         else {
-            std::cout << "Starting non-parallel extraction" << std::endl;
+            //std::cout << "Starting non-parallel extraction" << std::endl;
 
             auto begin = std::chrono::steady_clock::now(); // Start measurement
-            //auto a = omp_get_wtime();
+            auto a = omp_get_wtime();
 
             qc::QuantumComputation qc_extracted = qc::QuantumComputation(zxDiag.getNQubits());
             ExtractorParallel extractor1(qc_extracted, zxDiag, measurement);
@@ -1890,10 +2005,10 @@ namespace zx {
 
             auto end = std::chrono::steady_clock::now(); // End measurement
             //measurement.addMeasurement("extract", begin, end);
-            //auto b = omp_get_wtime();
+            auto b = omp_get_wtime();
             double duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
-            //extractor1.time_total = (end - begin) * 1000.0;
-            extractor1.time_total = duration / 1000000.0;
+            extractor1.time_total = (b - a) * 1000.0;
+            //extractor1.time_total = duration / 1000000.0;
             
             //std::cout << "Finished Circuit" << std::endl;
             //std::cout << qc_extracted << std::endl;
