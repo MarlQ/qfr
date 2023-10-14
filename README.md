@@ -4,6 +4,27 @@
 ![GitHub](https://img.shields.io/github/license/cda-tum/qfr?style=plastic)
 [![arXiv](https://img.shields.io/static/v1?label=arXiv&message=2103.08281&color=inactive&style=plastic)](https://arxiv.org/abs/2103.08281)
 
+# Master Thesis "Efficient Parallel Quantum Circuit Optimization Using the ZX-Calculus" - Benchmark testing
+
+## Building with Windows
+
+Build:
+```bash
+cmake -S . -B build
+```
+Then go to `/build` and open any `.vcxproj` file with Visual Studio 2019. Then select all build targets in the Solution Explorer on the right, click properties, and under `Configuration Properties -> General` change the Platform Toolset to `LLVM (clang-cl)`, then exit and save.
+
+Compile:
+```bash
+cmake --build build --config Release
+```
+
+Run:
+```bash
+.\build\apps\Release\qfr_app.exe
+```
+This will run all the circuit benchmark examples defined in app.cpp and save the results to benchmark_results.csv
+
 # MQT QFR - A Library for Quantum Functionality Representation Written in C++
 
 A library for the representation of quantum functionality by the [Institute for Integrated Circuits](http://iic.jku.at/eda/) at the [Johannes Kepler University Linz](https://jku.at). 
