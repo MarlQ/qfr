@@ -4,7 +4,7 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
-
+#include <filesystem>
 class BenchmarkData {
 public:
     std::string measurement_group = "MEASUREMENT";
@@ -233,8 +233,17 @@ public:
         output << "," << num_gates_h;
         output << "," << num_gates_swap;
         output << std::endl;
+
+        std::filesystem::path currentDir = std::filesystem::current_path();
         
-        std::ofstream csvFile("H:/Uni/Masterarbeit/statistics_complete.csv", std::ios::out | std::ios::app);
+        // Construct the relative path
+        std::filesystem::path relativePath = currentDir / "output" / "benchmark_results.csv";
+
+        std::cout << "Saving results to: " << relativePath << std::endl;
+
+        // Create and write to the file
+        std::ofstream csvFile(relativePath, std::ios::out | std::ios::app);
+        
         csvFile << output.str(); 
         csvFile.close();
     }

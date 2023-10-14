@@ -1887,9 +1887,14 @@ namespace zx {
             qc = std::make_unique<qc::QuantumComputation>(qc::RandomCliffordCircuit(nq, nq * nq, 12345));
         }
         else {
+            std::filesystem::path currentPath = std::filesystem::current_path();
+            std::string relativePath = circuitName;
+            std::filesystem::path outputPath = currentPath / relativePath;
+
             qc = std::make_unique<qc::QuantumComputation>();
             //std::cout << "Circuit " << circuitName << ":" << std::endl;
-            qc->import("H:/Uni/Masterarbeit/qcec/" + circuitName);
+            qc->import(outputPath.string());
+            std::cout << "Loading circuit " << outputPath << std::endl;
         }
         
         //std::cout << "Circuit loaded" << std::endl;

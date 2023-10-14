@@ -72,7 +72,7 @@ int main(int argc, char** argv) {
         "circuits\\large\\wstate_n118\\wstate_n118_transpiled.qasm",
     };
     bool benchmark = true;
-    int benchmarkIterations = 1;
+    int benchmarkIterations = 20;
     std::string benchmarkName = "B6";
     if(benchmark) {
         zx::ExtractorConfig config;
