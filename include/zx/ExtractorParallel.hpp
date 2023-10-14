@@ -83,7 +83,9 @@ namespace zx {
         std::unordered_set<size_t> claimed_neighbors;
 
         double time_total = 0;
+        double time_parallel = 0;
         int iteration = 0;
+        int iteration_diff = 0;
 
         int parallel_iterations = 0;
         int total_iterations = 0;
@@ -155,8 +157,10 @@ namespace zx {
 
             // Fill the BenchmarkData object with the extractor's information
             data.time_total = time_total;
+            data.time_parallel = time_parallel;
             data.parallel_iterations = parallel_iterations;
             data.total_iterations = total_iterations;
+            data.iteration_diff = iteration_diff;
             data.time_extr_par_cnot = time_extr_par_cnot;
             data.time_extr_par_cz = time_extr_par_cz;
             data.time_extr_par_fp = time_extr_par_fp;

@@ -10,8 +10,10 @@ public:
     std::string measurement_group = "MEASUREMENT";
     std::string circuit_name = "CIRCUIT";
     double time_total = 0;
+    double time_parallel = 0;
     int parallel_iterations = 0;
     int total_iterations = 0;
+    int iteration_diff = 0;
 
     double time_extr_par_cnot = 0;
     double time_extr_par_cz = 0;
@@ -47,8 +49,10 @@ public:
         // Merge data from another BenchmarkData object and average the fields
     void averageData(const BenchmarkData& other) {
         time_total = (time_total + other.time_total);
+        time_parallel = time_parallel + other.time_parallel;
         parallel_iterations = (parallel_iterations + other.parallel_iterations);
         total_iterations = (total_iterations + other.total_iterations);
+        iteration_diff = iteration_diff + other.iteration_diff;
         time_extr_par_cnot = std::max(time_extr_par_cnot, other.time_extr_par_cnot);
         time_extr_par_cz = std::max(time_extr_par_cz, other.time_extr_par_cz);
         time_extr_par_fp = std::max(time_extr_par_fp, other.time_extr_par_fp);
@@ -76,9 +80,10 @@ public:
 
     void mergeData(const BenchmarkData& other) {
         dataAggregates++;
-        time_total = (time_total+ other.time_total);
+        //time_total = (time_total+ other.time_total);
         parallel_iterations = (parallel_iterations + other.parallel_iterations);
         total_iterations = (total_iterations + other.total_iterations);
+        iteration_diff = iteration_diff + other.iteration_diff;
         time_extr_par_cnot = (time_extr_par_cnot+ other.time_extr_par_cnot);
         time_extr_par_cz = (time_extr_par_cz+ other.time_extr_par_cz);
         time_extr_par_fp = (time_extr_par_fp+ other.time_extr_par_fp);
@@ -102,7 +107,8 @@ public:
         num_gates_phase = (num_gates_phase + other.num_gates_phase);
         num_gates_h = (num_gates_h + other.num_gates_h);
         num_gates_swap = (num_gates_swap + other.num_gates_swap);
-        //time_totals.emplace_back(other.time_total);
+        time_totals.emplace_back(other.time_total);
+        time_parallel_totals.emplace_back(other.time_parallel);
 
         //time_total = std::min(time_total, other.time_total);
 /*         parallel_iterations = std::min(parallel_iterations , other.parallel_iterations);
@@ -180,9 +186,11 @@ public:
         output << measurement_group;
         output << "," << circuit_name;
         output << "," << time_total;
+        output << "," << time_parallel;
         output << "," << parallel_iterations;
         output << "," << total_iterations;
         output << "," << (total_iterations > 0 ?  ((double)parallel_iterations / (double)total_iterations) : 0);
+        output << "," << iteration_diff;
         output << "," << time_extr_par_cnot;
         output << "," << time_extr_par_cz;
         output << "," << time_extr_par_fp;
@@ -232,9 +240,11 @@ public:
     }
 
     void finish() {
-        time_total /=dataAggregates;
+        time_total = median(time_totals);
+        time_parallel = median(time_parallel_totals);
         parallel_iterations /=dataAggregates;
         total_iterations /=dataAggregates;
+        iteration_diff /= dataAggregates;
 
         time_extr_par_cnot /=dataAggregates;
         time_extr_par_cz /=dataAggregates;
@@ -272,6 +282,7 @@ public:
         time_total = 0;
         parallel_iterations = 0;
         total_iterations = 0;
+        iteration_diff = 0;
 
         time_extr_par_cnot = 0;
         time_extr_par_cz = 0;
@@ -306,7 +317,8 @@ public:
 
         dataAggregates = 0;
 
-
+        time_totals.clear();
+        time_parallel_totals.clear();
     }
 
 private:
@@ -323,7 +335,7 @@ private:
         size_t n = v.size() / 2;
         std::nth_element(v.begin(), v.begin()+n, v.end());
         return v[n];
-    }
+    } */
 
     double median(std::vector<double> &v) {
         size_t n = v.size() / 2;
@@ -331,5 +343,6 @@ private:
         return v[n];
     }
 
-    std::vector<double> time_totals; */
+    std::vector<double> time_totals;
+    std::vector<double> time_parallel_totals;
 };

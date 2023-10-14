@@ -30,36 +30,36 @@ int main(int argc, char** argv) {
     std::cout << "Starting App" << std::endl;
 
     std::vector<std::string> circuits = {
-        "circuits\\large\\adder_n28\\adder_n28.qasm",
-        "circuits\\large\\adder_n64\\adder_n64.qasm",
-        "circuits\\large\\adder_n118\\adder_n118.qasm",
+        "circuits\\large\\adder_n28\\adder_n28_transpiled.qasm",
+        "circuits\\large\\adder_n64\\adder_n64_transpiled.qasm",
+        "circuits\\large\\adder_n118\\adder_n118_transpiled.qasm",
         "circuits\\pyzx\\barenco_tof_5.qasm",
         "circuits\\pyzx\\barenco_tof_10.qasm",
-        "circuits\\large\\bv_n30\\bv_n30.qasm",
-        "circuits\\large\\bv_n70\\bv_n70.qasm",
-        "circuits\\large\\cat_n35\\cat_n35.qasm",
-        "circuits\\large\\cat_n65\\cat_n65.qasm",
+        "circuits\\large\\bv_n30\\bv_n30_transpiled.qasm",
+        "circuits\\large\\bv_n70\\bv_n70_transpiled.qasm",
+        "circuits\\large\\cat_n35\\cat_n35_transpiled.qasm",
+        "circuits\\large\\cat_n65\\cat_n65_transpiled.qasm",
         "circuits\\pyzx\\gf2^10_mult.qasm",
         "circuits\\pyzx\\gf2^16_mult.qasm",
         "circuits\\pyzx\\gf2^32_mult.qasm", 
-        "circuits\\large\\ghz_n40\\ghz_n40.qasm",
-        "circuits\\large\\ghz_n78\\ghz_n78.qasm",
-        "circuits\\large\\ghz_n127\\ghz_n127.qasm",
+        "circuits\\large\\ghz_n40\\ghz_n40_transpiled.qasm",
+        "circuits\\large\\ghz_n78\\ghz_n78_transpiled.qasm",
+        "circuits\\large\\ghz_n127\\ghz_n127_transpiled.qasm",
         "circuits\\pyzx\\ham15-low.qasm",
         "circuits\\pyzx\\ham15-med.qasm",
         "circuits\\pyzx\\ham15-high.qasm",
-        "circuits\\small\\hhl_n7\\hhl_n7.qasm",
-        "circuits\\small\\hhl_n10\\hhl_n10.qasm",
+        "circuits\\small\\hhl_n7\\hhl_n7_transpiled.qasm",
+        "circuits\\small\\hhl_n10\\hhl_n10_transpiled.qasm",
         "circuits\\pyzx\\hwb6.qasm",
         "circuits\\pyzx\\hwb8.qasm",
         "circuits\\pyzx\\hwb10.qasm",
         "circuits\\pyzx\\hwb12.qasm",
         "circuits\\pyzx\\mod_adder_1024.qasm",
-        "circuits\\large\\multiplier_n45\\multiplier_n45.qasm",
-        "circuits\\large\\multiplier_n75\\multiplier_n75.qasm",
-        "circuits\\large\\qft_n29\\qft_n29.qasm",
-        "circuits\\large\\qft_n63\\qft_n63.qasm",
-        "circuits\\medium\\qram_n20\\qram_n20.qasm", 
+        "circuits\\large\\multiplier_n45\\multiplier_n45_transpiled.qasm", 
+        "circuits\\large\\multiplier_n75\\multiplier_n75_transpiled.qasm",
+        "circuits\\large\\qft_n29\\qft_n29_transpiled.qasm",
+        "circuits\\large\\qft_n63\\qft_n63_transpiled.qasm",
+        "circuits\\medium\\qram_n20\\qram_n20_transpiled.qasm",
         "circuits\\large\\qugan_n39\\qugan_n39_transpiled.qasm",
         "circuits\\large\\qugan_n71\\qugan_n71_transpiled.qasm",
         "circuits\\large\\qugan_n111\\qugan_n111_transpiled.qasm",
@@ -72,44 +72,43 @@ int main(int argc, char** argv) {
         "circuits\\large\\wstate_n118\\wstate_n118_transpiled.qasm",
     };
     bool benchmark = true;
-    int benchmarkIterations = 20;
-    std::string benchmarkName = "benchmark_11";
+    int benchmarkIterations = 1;
+    std::string benchmarkName = "B6";
     if(benchmark) {
         zx::ExtractorConfig config;
         config.perm_optimization = true;
         int counter = 1;
+        //double average = 0;
         for(std::string circuit : circuits) {
             std::cout << "Benchmark " << counter << " / " << circuits.size() << " (" << circuit <<")" << std::endl;
-
-/*             std::unique_ptr<qc::QuantumComputation> qc = std::make_unique<qc::QuantumComputation>();
+/* 
+             std::unique_ptr<qc::QuantumComputation> qc = std::make_unique<qc::QuantumComputation>();
             qc->import("H:/Uni/Masterarbeit/qcec/" + circuit);
             zx::ZXDiagram zxDiag = zx::FunctionalityConstruction::buildFunctionality(qc.get());
             zxDiag.toGraphlike();
+            int vertCountBefore = zxDiag.getNVertices();
             zx::interiorCliffordSimp(zxDiag);
-            std::string filename = "H:\\Uni\\Masterarbeit\\pyzx\\thesis\\" + circuit + ".json";
+            int vertCountAfter = zxDiag.getNVertices();
+            double percentage = ( ((double) vertCountBefore) -  ((double) vertCountAfter) ) / ((double) vertCountBefore) * 100;
+            average += percentage;
+            std::cout << "Vertices: " << vertCountAfter << " / " << vertCountBefore << "(" << percentage << ")" << std::endl; 
+            continue;*/
+/*             std::string filename = "H:\\Uni\\Masterarbeit\\pyzx\\thesis\\" + circuit + ".json";
             std::cout << "Writing to " << filename << std::endl;
 
-            zxDiag.toJSON(filename);
-            continue; */
-
+            zxDiag.toJSON(filename); */
             BenchmarkData averageData;
             averageData.circuit_name = circuit;
-            std::cout << "Testing sewq" << std::endl;
+
+            std::cout << "Testing sequential version" << std::endl;
             averageData.measurement_group = benchmarkName + "_seq";
             for(int i = 0; i < benchmarkIterations; i++) {
                 BenchmarkData executionData = zx::testParallelExtraction(circuit, benchmarkName + "_seq", false, config);
                 averageData.mergeData(executionData);
             }
             averageData.finish();
-
-/*             config.parallel_allow_claimed_vertices_for_cnot = false;
-            averageData.measurement_group = benchmarkName + "_par";
-            for(int i = 0; i < benchmarkIterations; i++) { 
-                BenchmarkData executionData = zx::testParallelExtraction(circuit, benchmarkName + "_par", true, config);
-                averageData.mergeData(executionData);
-            }
-            averageData.finish(); */
-            std::cout << "Testing par" << std::endl;
+            
+            std::cout << "Testing parallel version" << std::endl;
             config.parallel_frontier_processing = false;
             averageData.measurement_group = benchmarkName + "_par";
             for(int i = 0; i < benchmarkIterations; i++) { 
@@ -117,15 +116,16 @@ int main(int argc, char** argv) {
                 averageData.mergeData(executionData);
             }
             averageData.finish();
-
-            std::cout << "Testing new" << std::endl;
+ 
+/*             std::cout << "Testing parallel version with claimed FP" << std::endl;
             config.parallel_frontier_processing = true;
             averageData.measurement_group = benchmarkName + "_parFP";
             for(int i = 0; i < benchmarkIterations; i++) { 
+                std::cout << "I " << i << std::endl;
                 BenchmarkData executionData = zx::testParallelExtraction(circuit, benchmarkName + "_parFP", true, config);
                 averageData.mergeData(executionData);
             }
-            averageData.finish();
+            averageData.finish(); */
             counter++;
         }
         return 0;
